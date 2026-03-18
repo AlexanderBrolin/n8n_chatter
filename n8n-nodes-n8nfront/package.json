@@ -1,0 +1,46 @@
+{
+	"name": "n8n-nodes-n8nfront",
+	"version": "2.1.0",
+	"description": "n8n community nodes for N8nFront chat platform — Telegram-compatible Bot API",
+	"license": "MIT",
+	"author": {
+		"name": "ITSS"
+	},
+	"main": "dist/nodes/N8nFront/N8nFront.node.js",
+	"keywords": [
+		"n8n-community-node-package",
+		"n8n",
+		"n8nfront",
+		"chat",
+		"bot",
+		"telegram-compatible"
+	],
+	"n8n": {
+		"n8nNodesApiVersion": 1,
+		"credentials": [
+			"dist/credentials/N8nFrontApi.credentials.js"
+		],
+		"nodes": [
+			"dist/nodes/N8nFront/N8nFront.node.js",
+			"dist/nodes/N8nFront/N8nFrontTrigger.node.js"
+		]
+	},
+	"scripts": {
+		"build": "tsc",
+		"dev": "tsc --watch",
+		"postbuild": "cp nodes/N8nFront/n8nfront.svg dist/nodes/N8nFront/",
+		"prepublishOnly": "npm run build"
+	},
+	"devDependencies": {
+		"n8n-workflow": "^1.0.0",
+		"typescript": "~5.4.0",
+		"@types/node": "^20.0.0"
+	},
+	"peerDependencies": {
+		"n8n-workflow": "*"
+	},
+	"files": [
+		"dist",
+		"README.md"
+	]
+}

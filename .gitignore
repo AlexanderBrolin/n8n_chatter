@@ -1,0 +1,42 @@
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+build/
+*.egg
+.eggs/
+*.so
+*.dylib
+
+# Python dist (не n8n)
+/dist/
+
+# Virtualenv
+venv/
+.env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Data
+*.db
+server/static/uploads/*
+!server/static/uploads/.gitkeep
+data/
+
+# Docker
+envfile
+
+# Migrations
+migrations/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# n8n-nodes-n8nfront
+n8n-nodes-n8nfront/node_modules/
+n8n-nodes-n8nfront/.npmrc

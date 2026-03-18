@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block title %}Боты — N8n Chat{% endblock %}
+{% block page_title %}Боты{% endblock %}
+
+{% block content %}
+<div class="mb-4 flex justify-between items-center">
+    <p class="text-sm text-gray-500">Зарегистрированные n8n-боты</p>
+    <a href="{{ url_for('views.bot_new') }}"
+       class="bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors">
+        + Новый бот
+    </a>
+</div>
+
+<div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+    <table class="w-full text-sm">
+        <thead>
+            <tr class="border-b border-gray-200 bg-gray-50">
+                <th class="text-left px-5 py-3 font-medium text-gray-500">Имя</th>
+                <th class="text-left px-5 py-3 font-medium text-gray-500">Username</th>
+                <th class="text-left px-5 py-3 font-medium text-gray-500">Webhook</th>
+                <th class="text-left px-5 py-3 font-medium text-gray-500">Статус</th>
+                <th class="text-left px-5 py-3 font-medium text-gray-500">Создан</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+            {% for bot in bots.items %}
+            <tr class="hover:bg-gray-50 cursor-pointer" onclick="window.location='{{ url_for('views.bot_edit', bot_id=bot.id) }}'">
+                <td class="px-5 py-3 font-medium text-gray-900">{{ bot.name }}</td>
+                <td class="px-5 py-3 text-gray-600">@{{ bot.username }}</td>
+                <td class="px-5 py-3 text-gray-500 max-w-xs truncate">{{ bot.webhook_url }}</td>
+                <td class="px-5 py-3">
+                    {% if bot.is_active %}
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">Активен</span>
+                    {% else %}
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">Неактивен</span>
+                    {% endif %}
+                </td>
+                <td class="px-5 py-3 text-gray-500">{{ bot.created_at.strftime('%d.%m.%Y') }}</td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="5" class="px-5 py-8 text-center text-gray-400">Нет ботов. Создайте первого!</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if bots.pages > 1 %}
+<div class="mt-4 flex justify-center gap-2">
+    {% if bots.has_prev %}
+    <a href="?page={{ bots.prev_num }}" class="px-3 py-1 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">Назад</a>
+    {% endif %}
+    <span class="px-3 py-1 text-sm text-gray-500">{{ bots.page }} / {{ bots.pages }}</span>
+    {% if bots.has_next %}
+    <a href="?page={{ bots.next_num }}" class="px-3 py-1 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">Далее</a>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}

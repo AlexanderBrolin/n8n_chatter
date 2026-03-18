@@ -1,0 +1,1035 @@
+<!DOCTYPE html>
+<html lang="ru" class="h-full">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>N8n Chat</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+    tailwind.config = {
+        theme: {
+            extend: {
+                colors: {
+                    primary: {
+                        50: '#eff6ff', 100: '#dbeafe', 200: '#bfdbfe',
+                        300: '#93c5fd', 400: '#60a5fa', 500: '#3b82f6',
+                        600: '#2563eb', 700: '#1d4ed8', 800: '#1e40af', 900: '#1e3a8a',
+                    }
+                }
+            }
+        }
+    }
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        [x-cloak] { display: none !important; }
+        .msg-markdown h1, .msg-markdown h2, .msg-markdown h3 { font-weight: 600; margin: 0.5em 0 0.25em; }
+        .msg-markdown h1 { font-size: 1.25em; }
+        .msg-markdown h2 { font-size: 1.1em; }
+        .msg-markdown h3 { font-size: 1em; }
+        .msg-markdown p { margin: 0.25em 0; }
+        .msg-markdown ul, .msg-markdown ol { padding-left: 1.5em; margin: 0.25em 0; }
+        .msg-markdown ul { list-style-type: disc; }
+        .msg-markdown ol { list-style-type: decimal; }
+        .msg-markdown code { background: rgba(0,0,0,0.06); padding: 0.1em 0.3em; border-radius: 3px; font-size: 0.9em; }
+        .msg-markdown pre { background: rgba(0,0,0,0.06); padding: 0.75em; border-radius: 6px; overflow-x: auto; margin: 0.5em 0; }
+        .msg-markdown pre code { background: none; padding: 0; }
+        .msg-markdown a { color: #2563eb; text-decoration: underline; }
+        .msg-markdown blockquote { border-left: 3px solid #d1d5db; padding-left: 0.75em; margin: 0.5em 0; color: #6b7280; }
+        .msg-markdown table { border-collapse: collapse; margin: 0.5em 0; }
+        .msg-markdown th, .msg-markdown td { border: 1px solid #d1d5db; padding: 0.25em 0.5em; }
+
+        .typing-dot { animation: typing-bounce 1.4s infinite ease-in-out both; }
+        .typing-dot:nth-child(1) { animation-delay: 0s; }
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes typing-bounce {
+            0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+            40% { transform: scale(1); opacity: 1; }
+        }
+
+        .msg-hover-actions { opacity: 0; transition: opacity 0.15s; }
+        .msg-wrapper:hover .msg-hover-actions { opacity: 1; }
+    </style>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+</head>
+<body class="h-full bg-gray-100 overflow-hidden">
+
+<div x-data="chatApp()" x-init="init()" class="flex h-full" x-cloak>
+
+    <!-- Mobile overlay -->
+    <div x-show="sidebarOpen" @click="sidebarOpen = false"
+         class="fixed inset-0 bg-black/50 z-40 lg:hidden"
+         x-transition:enter="transition-opacity duration-200"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100"></div>
+
+    <!-- Sidebar -->
+    <aside class="fixed inset-y-0 left-0 z-50 w-80 bg-white border-r border-gray-200 flex flex-col transform transition-transform duration-200 lg:relative lg:translate-x-0"
+           :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'">
+
+        <!-- Header -->
+        <div class="h-14 px-4 border-b border-gray-200 flex items-center justify-between shrink-0">
+            <div class="flex items-center gap-2">
+                <div class="w-7 h-7 bg-primary-600 rounded-lg flex items-center justify-center">
+                    <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                    </svg>
+                </div>
+                <span class="font-semibold text-gray-900 text-sm">N8n Chat</span>
+            </div>
+            <a href="{{ url_for('chat_auth.logout') }}" class="text-gray-400 hover:text-gray-600" title="Выйти">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+                </svg>
+            </a>
+        </div>
+
+        <!-- Search -->
+        <div class="px-3 py-2 border-b border-gray-100">
+            <div class="flex items-center gap-1">
+                <input type="text" x-model="search" :placeholder="searchMode ? 'Поиск по сообщениям...' : 'Поиск...'"
+                       @input="searchMode && searchDebounced()"
+                       @keydown.enter="searchMode && searchMessages()"
+                       class="flex-1 px-3 py-1.5 bg-gray-100 border-0 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+                <button @click="toggleSearchMode()"
+                        class="p-1.5 rounded-lg transition-colors shrink-0"
+                        :class="searchMode ? 'bg-primary-100 text-primary-600' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'"
+                        :title="searchMode ? 'Обычный режим' : 'Поиск по сообщениям'">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- Content area -->
+        <div class="flex-1 overflow-y-auto">
+            <!-- Search results mode -->
+            <template x-if="searchMode">
+                <div>
+                    <template x-if="searchLoading">
+                        <div class="px-4 py-8 text-center text-gray-400 text-sm">Поиск...</div>
+                    </template>
+                    <template x-if="!searchLoading && searchResults.length === 0 && search.length >= 2">
+                        <div class="px-4 py-8 text-center text-gray-400 text-sm">Ничего не найдено</div>
+                    </template>
+                    <template x-if="!searchLoading && search.length < 2">
+                        <div class="px-4 py-8 text-center text-gray-400 text-sm">Введите минимум 2 символа</div>
+                    </template>
+                    <template x-for="sr in searchResults" :key="sr.message.id">
+                        <div @click="goToSearchResult(sr)" class="px-4 py-3 cursor-pointer hover:bg-gray-50 border-b border-gray-50">
+                            <div class="text-xs text-primary-600 font-medium truncate" x-text="sr.chat_title"></div>
+                            <div class="text-sm text-gray-700 mt-0.5 line-clamp-2" x-text="sr.message.text"></div>
+                            <div class="text-xs text-gray-400 mt-0.5" x-text="formatTime(sr.message.date)"></div>
+                        </div>
+                    </template>
+                </div>
+            </template>
+
+            <!-- Normal mode: conversations + available bots -->
+            <template x-if="!searchMode">
+                <div>
+                    <!-- Active conversations -->
+                    <template x-for="conv in filteredConversations" :key="conv.id">
+                        <div @click="selectConversation(conv); sidebarOpen = false"
+                             class="flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors border-b border-gray-50"
+                             :class="activeConversation && activeConversation.id === conv.id ? 'bg-primary-50' : 'hover:bg-gray-50'">
+                            <div class="relative shrink-0">
+                                <div class="w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-medium"
+                                     :class="activeConversation && activeConversation.id === conv.id ? 'bg-primary-600' : (conv.chat_type === 'group' ? 'bg-purple-400' : 'bg-gray-400')"
+                                     x-text="getConvDisplayName(conv).charAt(0).toUpperCase()"></div>
+                                <div x-show="conv._unread > 0"
+                                     class="absolute -top-1 -right-1 min-w-[18px] h-[18px] bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1"
+                                     x-text="conv._unread > 99 ? '99+' : conv._unread"></div>
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <div class="flex items-center gap-1.5">
+                                    <div class="text-sm font-medium text-gray-900 truncate" x-text="getConvDisplayName(conv)"></div>
+                                    <template x-if="conv.chat_type === 'group'">
+                                        <span class="text-[10px] text-purple-600 bg-purple-50 px-1 rounded">группа</span>
+                                    </template>
+                                </div>
+                                <div class="text-xs text-gray-500 truncate"
+                                     x-text="conv.last_message ? (conv.last_message.is_deleted ? 'Сообщение удалено' : (conv.last_message.text || 'Файл')) : 'Нет сообщений'"></div>
+                            </div>
+                        </div>
+                    </template>
+
+                    <!-- Empty state: no conversations -->
+                    <template x-if="conversations.length === 0 && availableBots.length === 0">
+                        <div class="px-4 py-8 text-center">
+                            <svg class="w-12 h-12 text-gray-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197"/>
+                            </svg>
+                            <p class="text-sm text-gray-400">У вас пока нет доступных ботов.</p>
+                            <p class="text-xs text-gray-400 mt-1">Обратитесь к администратору для получения доступа.</p>
+                        </div>
+                    </template>
+
+                    <!-- Available bots (not yet chatting) -->
+                    <template x-if="availableBots.length > 0">
+                        <div>
+                            <div class="px-4 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wider bg-gray-50">Доступные боты</div>
+                            <template x-for="bot in availableBots" :key="bot.id">
+                                <div @click="startConversation(bot)"
+                                     class="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors border-b border-gray-50">
+                                    <div class="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center text-green-700 text-sm font-medium shrink-0"
+                                         x-text="bot.name.charAt(0).toUpperCase()"></div>
+                                    <div class="min-w-0 flex-1">
+                                        <div class="text-sm font-medium text-gray-900 truncate" x-text="bot.name"></div>
+                                        <div class="text-xs text-gray-500 truncate" x-text="bot.description || '@' + bot.username"></div>
+                                    </div>
+                                    <svg class="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                                    </svg>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+                </div>
+            </template>
+        </div>
+
+        <!-- User info -->
+        <div class="px-4 py-3 border-t border-gray-200 shrink-0">
+            <div class="flex items-center gap-2">
+                <div class="w-7 h-7 bg-gray-200 rounded-full flex items-center justify-center text-xs font-medium text-gray-600">
+                    {{ user.username[0]|upper }}
+                </div>
+                <span class="text-sm text-gray-700">{{ user.first_name or user.username }}</span>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main chat area -->
+    <main class="flex-1 flex flex-col min-w-0 bg-white">
+        <template x-if="activeConversation">
+            <div class="flex flex-col h-full">
+                <!-- Chat header -->
+                <div class="h-14 px-4 border-b border-gray-200 flex items-center gap-3 shrink-0">
+                    <button @click="sidebarOpen = true" class="lg:hidden text-gray-500 hover:text-gray-700 mr-1">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                        </svg>
+                    </button>
+                    <div class="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-medium"
+                         :class="activeConversation.chat_type === 'group' ? 'bg-purple-500' : 'bg-primary-600'"
+                         x-text="getConvDisplayName(activeConversation).charAt(0).toUpperCase()"></div>
+                    <div>
+                        <div class="text-sm font-medium text-gray-900" x-text="getConvDisplayName(activeConversation)"></div>
+                        <div class="text-xs" :class="botTyping ? 'text-primary-600' : 'text-gray-500'">
+                            <template x-if="botTyping">
+                                <span>печатает...</span>
+                            </template>
+                            <template x-if="!botTyping">
+                                <span x-text="activeConversation.chat_type === 'group' ? activeConversation.bot.name : '@' + activeConversation.bot.username"></span>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Messages -->
+                <div class="flex-1 overflow-y-auto px-4 py-4 space-y-3" x-ref="messageArea"
+                     @scroll="handleScroll">
+                    <div x-show="hasMore" class="text-center">
+                        <button @click="loadMore()" class="text-xs text-primary-600 hover:text-primary-700 py-1">
+                            Загрузить ранние сообщения
+                        </button>
+                    </div>
+
+                    <!-- Empty state -->
+                    <template x-if="messages.length === 0 && !hasMore">
+                        <div class="flex items-center justify-center h-full">
+                            <div class="text-center">
+                                <div class="w-14 h-14 bg-primary-100 rounded-full flex items-center justify-center text-primary-600 text-xl font-bold mx-auto mb-3"
+                                     x-text="activeConversation.bot.name.charAt(0).toUpperCase()"></div>
+                                <p class="text-sm text-gray-500 font-medium" x-text="getConvDisplayName(activeConversation)"></p>
+                                <p class="text-xs text-gray-400 mt-1">Напишите первое сообщение, чтобы начать диалог</p>
+                            </div>
+                        </div>
+                    </template>
+
+                    <template x-for="msg in messages" :key="msg.id">
+                        <div class="flex msg-wrapper" :class="msg.sender_type === 'user' && msg.sender_id === CURRENT_USER_ID ? 'justify-end' : 'justify-start'">
+                            <div class="max-w-[75%] lg:max-w-[60%] relative group">
+                                <!-- Sender name for group chats -->
+                                <template x-if="activeConversation.chat_type === 'group' && !(msg.sender_type === 'user' && msg.sender_id === CURRENT_USER_ID) && !msg.is_deleted">
+                                    <div class="text-xs font-medium mb-0.5 px-1"
+                                         :class="msg.sender_type === 'bot' ? 'text-gray-500' : 'text-purple-600'"
+                                         x-text="msg.sender_name || (msg.sender_type === 'bot' ? activeConversation.bot.name : 'Пользователь')"></div>
+                                </template>
+
+                                <!-- Deleted message -->
+                                <template x-if="msg.is_deleted">
+                                    <div class="rounded-2xl px-4 py-2 text-sm bg-gray-50 text-gray-400 italic border border-gray-100 rounded-bl-md">
+                                        Сообщение удалено
+                                    </div>
+                                </template>
+
+                                <!-- Normal message -->
+                                <template x-if="!msg.is_deleted">
+                                    <div>
+                                        <!-- Delete button (hover) -->
+                                        <template x-if="msg.sender_type === 'user' && msg.sender_id === CURRENT_USER_ID">
+                                            <button @click="deleteMessage(msg.id)"
+                                                    class="msg-hover-actions absolute -top-2 right-0 w-5 h-5 bg-red-100 hover:bg-red-200 rounded-full flex items-center justify-center z-10 transition-colors">
+                                                <svg class="w-3 h-3 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                                </svg>
+                                            </button>
+                                        </template>
+
+                                        <!-- Message bubble -->
+                                        <div class="rounded-2xl px-4 py-2 text-sm break-words"
+                                             :class="msg.sender_type === 'user' && msg.sender_id === CURRENT_USER_ID
+                                                 ? 'bg-primary-600 text-white rounded-br-md'
+                                                 : (msg.sender_type === 'user' ? 'bg-purple-100 text-gray-900 rounded-bl-md' : 'bg-gray-100 text-gray-900 rounded-bl-md')">
+                                            <template x-if="msg.text && msg.parse_mode === 'markdown'">
+                                                <div class="msg-markdown" x-html="renderMarkdown(msg.text)"></div>
+                                            </template>
+                                            <template x-if="msg.text && msg.parse_mode !== 'markdown'">
+                                                <div x-text="msg.text" style="white-space: pre-wrap;"></div>
+                                            </template>
+
+                                            <!-- Attachments -->
+                                            <template x-if="msg.attachments && msg.attachments.length > 0">
+                                                <div class="mt-2 space-y-2">
+                                                    <template x-for="att in msg.attachments" :key="att.file_id">
+                                                        <div>
+                                                            <template x-if="isImage(att.mime_type)">
+                                                                <a :href="'/chat/api/file/' + att.file_id" target="_blank">
+                                                                    <img :src="'/chat/api/file/' + att.file_id"
+                                                                         :alt="att.filename"
+                                                                         class="max-w-full rounded-lg max-h-64 cursor-pointer">
+                                                                </a>
+                                                            </template>
+                                                            <template x-if="!isImage(att.mime_type)">
+                                                                <a :href="'/chat/api/file/' + att.file_id"
+                                                                   class="flex items-center gap-2 p-2 rounded-lg transition-colors"
+                                                                   :class="msg.sender_type === 'user' && msg.sender_id === CURRENT_USER_ID ? 'bg-primary-700/30 hover:bg-primary-700/50' : 'bg-white hover:bg-gray-50 border border-gray-200'">
+                                                                    <svg class="w-8 h-8 shrink-0" :class="msg.sender_type === 'user' && msg.sender_id === CURRENT_USER_ID ? 'text-white/80' : 'text-gray-400'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
+                                                                    </svg>
+                                                                    <div class="min-w-0">
+                                                                        <div class="text-xs font-medium truncate" x-text="att.filename"></div>
+                                                                        <div class="text-xs opacity-60" x-text="formatSize(att.file_size)"></div>
+                                                                    </div>
+                                                                </a>
+                                                            </template>
+                                                        </div>
+                                                    </template>
+                                                </div>
+                                            </template>
+                                        </div>
+
+                                        <!-- Inline buttons -->
+                                        <template x-if="msg.reply_markup && msg.reply_markup.inline_keyboard">
+                                            <div class="mt-1 space-y-1">
+                                                <template x-for="(row, ri) in msg.reply_markup.inline_keyboard" :key="ri">
+                                                    <div class="flex gap-1">
+                                                        <template x-for="(btn, bi) in row" :key="bi">
+                                                            <button
+                                                                @click="handleInlineButton(msg.id, btn)"
+                                                                class="flex-1 px-3 py-1.5 bg-primary-50 hover:bg-primary-100 text-primary-700 text-xs font-medium rounded-lg border border-primary-200 transition-colors truncate"
+                                                                x-text="btn.text">
+                                                            </button>
+                                                        </template>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                        </template>
+
+                                        <!-- Time + edited -->
+                                        <div class="text-xs mt-0.5 px-1 flex items-center gap-1"
+                                             :class="msg.sender_type === 'user' && msg.sender_id === CURRENT_USER_ID ? 'justify-end text-gray-400' : 'text-gray-400'">
+                                            <span x-text="formatTime(msg.date)"></span>
+                                            <template x-if="msg.edited_at">
+                                                <span class="italic">(ред.)</span>
+                                            </template>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </template>
+
+                    <!-- Typing indicator -->
+                    <div x-show="botTyping" class="flex justify-start">
+                        <div class="bg-gray-100 rounded-2xl rounded-bl-md px-4 py-3">
+                            <div class="flex gap-1">
+                                <div class="w-2 h-2 bg-gray-400 rounded-full typing-dot"></div>
+                                <div class="w-2 h-2 bg-gray-400 rounded-full typing-dot"></div>
+                                <div class="w-2 h-2 bg-gray-400 rounded-full typing-dot"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- File size error -->
+                <div x-show="fileSizeError" x-transition
+                     class="mx-4 mb-2 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-600 flex items-center gap-2">
+                    <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    <span x-text="fileSizeError"></span>
+                    <button @click="fileSizeError = ''" class="ml-auto text-red-400 hover:text-red-600">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+
+                <!-- Quick replies -->
+                <div x-show="quickReplies.length > 0" class="px-4 pb-1">
+                    <div class="flex flex-wrap gap-1.5">
+                        <template x-for="qr in quickReplies" :key="qr.id">
+                            <button @click="useQuickReply(qr.text)"
+                                    class="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs rounded-full transition-colors truncate max-w-[200px]"
+                                    x-text="qr.text">
+                            </button>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- Input area -->
+                <div class="border-t border-gray-200 px-4 py-3 shrink-0">
+                    <div x-show="selectedFiles.length > 0" class="mb-2 flex flex-wrap gap-2">
+                        <template x-for="(file, idx) in selectedFiles" :key="idx">
+                            <div class="flex items-center gap-1.5 bg-gray-100 rounded-lg px-2.5 py-1.5 text-xs text-gray-700">
+                                <svg class="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/>
+                                </svg>
+                                <span class="max-w-[120px] truncate" x-text="file.name"></span>
+                                <span class="text-gray-400" x-text="'(' + formatSize(file.size) + ')'"></span>
+                                <button @click="removeFile(idx)" class="text-gray-400 hover:text-gray-600">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                    </svg>
+                                </button>
+                            </div>
+                        </template>
+                    </div>
+
+                    <div class="flex items-end gap-2">
+                        <button @click="$refs.fileInput.click()"
+                                :disabled="sending"
+                                class="text-gray-400 hover:text-gray-600 p-2 rounded-lg hover:bg-gray-100 transition-colors shrink-0 disabled:opacity-50">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/>
+                            </svg>
+                        </button>
+                        <input type="file" x-ref="fileInput" multiple class="hidden" @change="onFilesSelected">
+
+                        <textarea x-model="newMessage"
+                                  @keydown.enter="if (!$event.shiftKey) { $event.preventDefault(); sendMessage() }"
+                                  placeholder="Написать сообщение..."
+                                  rows="1"
+                                  :disabled="sending"
+                                  class="flex-1 px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 resize-none max-h-32 disabled:opacity-50"
+                                  x-ref="messageInput"
+                                  @input="autoResize($el)"></textarea>
+
+                        <button @click="sendMessage()"
+                                :disabled="sending || (!newMessage.trim() && selectedFiles.length === 0)"
+                                class="bg-primary-600 text-white p-2 rounded-xl hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0">
+                            <svg x-show="!sending" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+                            </svg>
+                            <svg x-show="sending" class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="text-[10px] text-gray-400 mt-1 text-right" x-show="newMessage.includes('\n')">
+                        Shift+Enter — новая строка, Enter — отправить
+                    </div>
+                </div>
+            </div>
+        </template>
+
+        <!-- Empty state: no conversation selected -->
+        <template x-if="!activeConversation">
+            <div class="flex-1 flex items-center justify-center">
+                <div class="text-center">
+                    <button @click="sidebarOpen = true" class="lg:hidden text-gray-400 hover:text-gray-600 mb-4">
+                        <svg class="w-8 h-8 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                        </svg>
+                    </button>
+                    <svg class="w-16 h-16 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                    </svg>
+                    <p class="text-gray-400 text-sm">Выберите чат для начала общения</p>
+                    <template x-if="conversations.length === 0 && availableBots.length > 0">
+                        <p class="text-gray-400 text-xs mt-2">Или начните новый диалог с одним из доступных ботов</p>
+                    </template>
+                </div>
+            </div>
+        </template>
+    </main>
+</div>
+
+<script>
+const CURRENT_USER_ID = {{ user.id }};
+const MAX_FILE_SIZE = 50 * 1024 * 1024;
+
+function chatApp() {
+    return {
+        conversations: [],
+        allBots: [],
+        activeConversation: null,
+        messages: [],
+        newMessage: '',
+        selectedFiles: [],
+        search: '',
+        sidebarOpen: false,
+        eventSource: null,
+        userEventSource: null,
+        sending: false,
+        hasMore: false,
+        botTyping: false,
+        _typingTimer: null,
+        _sseRetryCount: 0,
+        _sseRetryTimer: null,
+        _userSseRetryCount: 0,
+        _userSseRetryTimer: null,
+        fileSizeError: '',
+        _originalTitle: document.title,
+        _totalUnread: 0,
+        // Search
+        searchMode: false,
+        searchResults: [],
+        searchLoading: false,
+        _searchTimer: null,
+        // Quick replies
+        quickReplies: [],
+
+        async init() {
+            await Promise.all([this.loadConversations(), this.loadBots()]);
+            this.conversations.forEach(c => { c._unread = c._unread || 0; });
+            this.connectUserSSE();
+            this.requestNotificationPermission();
+        },
+
+        async loadConversations() {
+            try {
+                const resp = await fetch('/chat/api/conversations');
+                const convs = await resp.json();
+                convs.forEach(c => { c._unread = 0; });
+                this.conversations = convs;
+            } catch (e) { console.error('Load conversations error:', e); }
+        },
+
+        async loadBots() {
+            try {
+                const resp = await fetch('/chat/api/bots');
+                this.allBots = await resp.json();
+            } catch (e) { console.error('Load bots error:', e); }
+        },
+
+        getConvDisplayName(conv) {
+            if (conv.chat_type === 'group' && conv.title) return conv.title;
+            return conv.bot.name;
+        },
+
+        get filteredConversations() {
+            if (!this.search || this.searchMode) return this.conversations;
+            const q = this.search.toLowerCase();
+            return this.conversations.filter(c =>
+                c.bot.name.toLowerCase().includes(q) ||
+                c.bot.username.toLowerCase().includes(q) ||
+                (c.title && c.title.toLowerCase().includes(q))
+            );
+        },
+
+        get availableBots() {
+            const convBotIds = new Set(
+                this.conversations.filter(c => c.chat_type !== 'group').map(c => c.bot.id)
+            );
+            return this.allBots.filter(b => !convBotIds.has(b.id));
+        },
+
+        // --- Search ---
+
+        toggleSearchMode() {
+            this.searchMode = !this.searchMode;
+            this.search = '';
+            this.searchResults = [];
+        },
+
+        searchDebounced() {
+            if (this._searchTimer) clearTimeout(this._searchTimer);
+            this._searchTimer = setTimeout(() => this.searchMessages(), 400);
+        },
+
+        async searchMessages() {
+            if (this.search.length < 2) { this.searchResults = []; return; }
+            this.searchLoading = true;
+            try {
+                const resp = await fetch(`/chat/api/search?q=${encodeURIComponent(this.search)}`);
+                const data = await resp.json();
+                this.searchResults = data.results;
+            } catch (e) { console.error('Search error:', e); }
+            this.searchLoading = false;
+        },
+
+        goToSearchResult(sr) {
+            const conv = this.conversations.find(c => c.id === sr.conversation_id);
+            if (conv) {
+                this.searchMode = false;
+                this.search = '';
+                this.selectConversation(conv);
+                this.sidebarOpen = false;
+            }
+        },
+
+        // --- Conversations ---
+
+        async selectConversation(conv) {
+            this.activeConversation = conv;
+            this.botTyping = false;
+            this._totalUnread -= (conv._unread || 0);
+            conv._unread = 0;
+            this.updateTitleBadge();
+
+            await Promise.all([
+                this.loadMessages(conv.id),
+                this.loadQuickReplies(conv.id),
+            ]);
+            this.connectSSE(conv.id);
+            this.$nextTick(() => {
+                this.scrollToBottom();
+                if (this.$refs.messageInput) this.$refs.messageInput.focus();
+            });
+        },
+
+        async startConversation(bot) {
+            try {
+                const resp = await fetch('/chat/api/conversations/start', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ bot_id: bot.id }),
+                });
+                const conv = await resp.json();
+                conv.last_message = null;
+                conv.updated_at = new Date().toISOString();
+                conv._unread = 0;
+                this.conversations.unshift(conv);
+                this.selectConversation(conv);
+                this.sidebarOpen = false;
+            } catch (e) { console.error('Start conversation error:', e); }
+        },
+
+        async loadMessages(convId) {
+            try {
+                const resp = await fetch(`/chat/api/conversations/${convId}/messages`);
+                const data = await resp.json();
+                this.messages = data.messages;
+                this.hasMore = data.has_more;
+            } catch (e) { console.error('Load messages error:', e); }
+        },
+
+        async loadMore() {
+            if (!this.messages.length || !this.hasMore) return;
+            const firstId = this.messages[0].id;
+            const convId = this.activeConversation.id;
+            try {
+                const resp = await fetch(`/chat/api/conversations/${convId}/messages?before=${firstId}`);
+                const data = await resp.json();
+                this.messages = [...data.messages, ...this.messages];
+                this.hasMore = data.has_more;
+            } catch (e) { console.error('Load more error:', e); }
+        },
+
+        async loadQuickReplies(convId) {
+            try {
+                const resp = await fetch(`/chat/api/conversations/${convId}/quick_replies`);
+                this.quickReplies = await resp.json();
+            } catch (e) { this.quickReplies = []; }
+        },
+
+        useQuickReply(text) {
+            this.newMessage = text;
+            this.$nextTick(() => {
+                if (this.$refs.messageInput) {
+                    this.$refs.messageInput.focus();
+                    this.autoResize(this.$refs.messageInput);
+                }
+            });
+        },
+
+        // --- Send / Delete ---
+
+        async sendMessage() {
+            if (this.sending) return;
+            if (!this.newMessage.trim() && this.selectedFiles.length === 0) return;
+            if (!this.activeConversation) return;
+
+            this.sending = true;
+            const formData = new FormData();
+            if (this.newMessage.trim()) {
+                formData.append('text', this.newMessage.trim());
+            }
+            for (const f of this.selectedFiles) {
+                formData.append('files', f);
+            }
+
+            try {
+                const resp = await fetch(`/chat/api/conversations/${this.activeConversation.id}/send`, {
+                    method: 'POST',
+                    body: formData,
+                });
+                if (!resp.ok) {
+                    const err = await resp.json().catch(() => ({}));
+                    console.error('Send error:', err);
+                    return;
+                }
+                const msg = await resp.json();
+                if (!this.messages.find(m => m.id === msg.id)) {
+                    this.messages.push(msg);
+                }
+                this.newMessage = '';
+                this.selectedFiles = [];
+                this.$nextTick(() => {
+                    this.scrollToBottom();
+                    if (this.$refs.messageInput) {
+                        this.$refs.messageInput.style.height = 'auto';
+                    }
+                });
+                this.updateConversationPreview(this.activeConversation.id, msg);
+            } catch (e) {
+                console.error('Send message error:', e);
+            } finally {
+                this.sending = false;
+            }
+        },
+
+        async deleteMessage(msgId) {
+            if (!this.activeConversation) return;
+            if (!confirm('Удалить сообщение?')) return;
+            try {
+                const resp = await fetch(`/chat/api/conversations/${this.activeConversation.id}/messages/${msgId}`, {
+                    method: 'DELETE',
+                });
+                if (resp.ok) {
+                    const msg = this.messages.find(m => m.id === msgId);
+                    if (msg) {
+                        msg.is_deleted = true;
+                        msg.text = '';
+                        msg.attachments = [];
+                        msg.reply_markup = null;
+                    }
+                }
+            } catch (e) { console.error('Delete error:', e); }
+        },
+
+        // --- Inline buttons ---
+
+        async handleInlineButton(msgId, btn) {
+            if (btn.url) {
+                window.open(btn.url, '_blank');
+                return;
+            }
+            if (btn.callback_data && this.activeConversation) {
+                try {
+                    await fetch(`/chat/api/conversations/${this.activeConversation.id}/callback`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ message_id: msgId, data: btn.callback_data }),
+                    });
+                } catch (e) { console.error('Callback error:', e); }
+            }
+        },
+
+        // --- SSE: per-conversation ---
+
+        connectSSE(convId) {
+            if (this.eventSource) {
+                this.eventSource.close();
+                this.eventSource = null;
+            }
+            this._sseRetryCount = 0;
+            if (this._sseRetryTimer) {
+                clearTimeout(this._sseRetryTimer);
+                this._sseRetryTimer = null;
+            }
+            this._openSSE(convId);
+        },
+
+        _openSSE(convId) {
+            this.eventSource = new EventSource(`/chat/api/conversations/${convId}/stream`);
+
+            this.eventSource.onopen = () => {
+                this._sseRetryCount = 0;
+            };
+
+            this.eventSource.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+
+                if (data._type === 'typing') {
+                    this.showTyping();
+                    return;
+                }
+
+                if (data._type === 'delete') {
+                    const msg = this.messages.find(m => m.id === data.message_id);
+                    if (msg) {
+                        msg.is_deleted = true;
+                        msg.text = '';
+                        msg.attachments = [];
+                        msg.reply_markup = null;
+                    }
+                    return;
+                }
+
+                if (data._type === 'edit') {
+                    const msg = this.messages.find(m => m.id === data.id);
+                    if (msg) {
+                        msg.text = data.text;
+                        msg.parse_mode = data.parse_mode;
+                        msg.edited_at = data.edited_at;
+                        if (data.reply_markup) msg.reply_markup = data.reply_markup;
+                    }
+                    return;
+                }
+
+                // Regular message
+                this.botTyping = false;
+                if (!this.messages.find(m => m.id === data.id)) {
+                    this.messages.push(data);
+                    this.$nextTick(() => this.scrollToBottom());
+                }
+                this.updateConversationPreview(convId, data);
+            };
+
+            this.eventSource.onerror = () => {
+                this.eventSource.close();
+                this.eventSource = null;
+                if (this.activeConversation && this.activeConversation.id === convId) {
+                    const delay = Math.min(1000 * Math.pow(2, this._sseRetryCount), 30000);
+                    this._sseRetryCount++;
+                    this._sseRetryTimer = setTimeout(() => this._openSSE(convId), delay);
+                }
+            };
+        },
+
+        // --- SSE: user-level ---
+
+        connectUserSSE() {
+            this._userSseRetryCount = 0;
+            if (this._userSseRetryTimer) {
+                clearTimeout(this._userSseRetryTimer);
+                this._userSseRetryTimer = null;
+            }
+            this._openUserSSE();
+        },
+
+        _openUserSSE() {
+            this.userEventSource = new EventSource('/chat/api/stream');
+
+            this.userEventSource.onopen = () => {
+                this._userSseRetryCount = 0;
+            };
+
+            this.userEventSource.addEventListener('new_message', (event) => {
+                const data = JSON.parse(event.data);
+                const convId = data.conversation_id;
+                const msg = data.message;
+
+                this.updateConversationPreview(convId, msg);
+
+                if (!this.activeConversation || this.activeConversation.id !== convId) {
+                    const conv = this.conversations.find(c => c.id === convId);
+                    if (conv && msg.sender_type === 'bot') {
+                        conv._unread = (conv._unread || 0) + 1;
+                        this._totalUnread++;
+                        this.updateTitleBadge();
+                        this.notifyNewMessage(conv.bot.name, msg.text || 'Файл');
+                    }
+                }
+            });
+
+            this.userEventSource.addEventListener('typing', (event) => {
+                const data = JSON.parse(event.data);
+                if (this.activeConversation && this.activeConversation.id === data.conversation_id) {
+                    this.showTyping();
+                }
+            });
+
+            this.userEventSource.addEventListener('message_deleted', (event) => {
+                const data = JSON.parse(event.data);
+                if (this.activeConversation && this.activeConversation.id === data.conversation_id) {
+                    const msg = this.messages.find(m => m.id === data.message_id);
+                    if (msg) {
+                        msg.is_deleted = true;
+                        msg.text = '';
+                        msg.attachments = [];
+                        msg.reply_markup = null;
+                    }
+                }
+            });
+
+            this.userEventSource.addEventListener('message_edited', (event) => {
+                const data = JSON.parse(event.data);
+                if (this.activeConversation && this.activeConversation.id === data.conversation_id) {
+                    const msg = this.messages.find(m => m.id === data.message.id);
+                    if (msg) {
+                        msg.text = data.message.text;
+                        msg.parse_mode = data.message.parse_mode;
+                        msg.edited_at = data.message.edited_at;
+                        if (data.message.reply_markup) msg.reply_markup = data.message.reply_markup;
+                    }
+                }
+            });
+
+            this.userEventSource.onerror = () => {
+                this.userEventSource.close();
+                this.userEventSource = null;
+                const delay = Math.min(1000 * Math.pow(2, this._userSseRetryCount), 30000);
+                this._userSseRetryCount++;
+                this._userSseRetryTimer = setTimeout(() => this._openUserSSE(), delay);
+            };
+        },
+
+        // --- Typing ---
+
+        showTyping() {
+            this.botTyping = true;
+            if (this._typingTimer) clearTimeout(this._typingTimer);
+            this._typingTimer = setTimeout(() => { this.botTyping = false; }, 5000);
+            this.$nextTick(() => this.scrollToBottom());
+        },
+
+        // --- Notifications ---
+
+        requestNotificationPermission() {
+            if ('Notification' in window && Notification.permission === 'default') {
+                Notification.requestPermission();
+            }
+        },
+
+        notifyNewMessage(botName, text) {
+            this.playNotificationSound();
+            if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
+                const n = new Notification(botName, {
+                    body: text.substring(0, 100),
+                    icon: '/static/favicon.ico',
+                    tag: 'n8nchat-' + botName,
+                });
+                n.onclick = () => { window.focus(); n.close(); };
+            }
+        },
+
+        playNotificationSound() {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.frequency.value = 880;
+                osc.type = 'sine';
+                gain.gain.value = 0.1;
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+                osc.start(ctx.currentTime);
+                osc.stop(ctx.currentTime + 0.3);
+            } catch (e) { /* Audio not available */ }
+        },
+
+        updateTitleBadge() {
+            if (this._totalUnread > 0) {
+                document.title = `(${this._totalUnread}) ${this._originalTitle}`;
+            } else {
+                document.title = this._originalTitle;
+            }
+        },
+
+        updateConversationPreview(convId, msg) {
+            const conv = this.conversations.find(c => c.id === convId);
+            if (conv) {
+                conv.last_message = msg;
+                conv.updated_at = new Date().toISOString();
+                const idx = this.conversations.indexOf(conv);
+                if (idx > 0) {
+                    this.conversations.splice(idx, 1);
+                    this.conversations.unshift(conv);
+                }
+            }
+        },
+
+        // --- File handling ---
+
+        onFilesSelected(event) {
+            const files = Array.from(event.target.files);
+            const rejected = [];
+            const accepted = [];
+
+            for (const f of files) {
+                if (f.size > MAX_FILE_SIZE) {
+                    rejected.push(f.name);
+                } else {
+                    accepted.push(f);
+                }
+            }
+
+            if (rejected.length > 0) {
+                const names = rejected.join(', ');
+                this.fileSizeError = `Файлы превышают лимит 50 МБ: ${names}`;
+                setTimeout(() => { this.fileSizeError = ''; }, 5000);
+            }
+
+            this.selectedFiles = [...this.selectedFiles, ...accepted];
+            event.target.value = '';
+        },
+
+        removeFile(idx) {
+            this.selectedFiles.splice(idx, 1);
+        },
+
+        // --- Helpers ---
+
+        scrollToBottom() {
+            if (this.$refs.messageArea) {
+                this.$refs.messageArea.scrollTop = this.$refs.messageArea.scrollHeight;
+            }
+        },
+
+        autoResize(el) {
+            if (!el) return;
+            el.style.height = 'auto';
+            el.style.height = Math.min(el.scrollHeight, 128) + 'px';
+        },
+
+        formatTime(ts) {
+            const d = new Date(ts * 1000);
+            return d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+        },
+
+        formatSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        },
+
+        isImage(mimeType) {
+            return mimeType && mimeType.startsWith('image/');
+        },
+
+        renderMarkdown(text) {
+            if (typeof marked !== 'undefined' && marked.parse) {
+                return marked.parse(text);
+            }
+            return text.replace(/\n/g, '<br>');
+        },
+
+        handleScroll(event) {
+            // Could load more on scroll to top
+        },
+    };
+}
+</script>
+
+</body>
+</html>

@@ -1,0 +1,50 @@
+version: '3.8'
+
+volumes:
+  db_storage:
+  uploads:
+
+services:
+  postgres:
+    image: postgres:16
+    env_file: envfile
+    restart: always
+    environment:
+      - POSTGRES_USER=${DB_USER:-n8n_front}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-n8n_front}
+      - POSTGRES_DB=${DB_NAME:-n8n_front}
+    volumes:
+      - db_storage:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -h localhost -U ${DB_USER:-n8n_front} -d ${DB_NAME:-n8n_front}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  n8n-front:
+    build: .
+    restart: unless-stopped
+    env_file: envfile
+    ports:
+      - "${APP_PORT:-5001}:5000"
+    volumes:
+      - uploads:/app/server/static/uploads
+    environment:
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+      - DATABASE_URL=postgresql://${DB_USER:-n8n_front}:${DB_PASSWORD:-n8n_front}@postgres:5432/${DB_NAME:-n8n_front}
+      - REDIS_URL=redis://redis:6379/0
+      - UPLOAD_FOLDER=/app/server/static/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy

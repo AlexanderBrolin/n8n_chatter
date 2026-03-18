@@ -1,0 +1,6 @@
+nodes/
+credentials/
+tsconfig.json
+*.ts
+!dist/**
+node_modules/

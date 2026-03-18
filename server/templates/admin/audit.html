@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}Аудит — N8n Chat{% endblock %}
+{% block page_title %}Аудит{% endblock %}
+
+{% block content %}
+<div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+    <table class="w-full text-sm">
+        <thead>
+            <tr class="border-b border-gray-200 bg-gray-50">
+                <th class="text-left px-5 py-3 font-medium text-gray-500">Дата</th>
+                <th class="text-left px-5 py-3 font-medium text-gray-500">Кто</th>
+                <th class="text-left px-5 py-3 font-medium text-gray-500">Действие</th>
+                <th class="text-left px-5 py-3 font-medium text-gray-500">Цель</th>
+                <th class="text-left px-5 py-3 font-medium text-gray-500">Детали</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+            {% for log in logs.items %}
+            <tr>
+                <td class="px-5 py-3 text-gray-500 whitespace-nowrap">{{ log.timestamp.strftime('%d.%m.%Y %H:%M:%S') }}</td>
+                <td class="px-5 py-3 font-medium text-gray-900">{{ log.actor }}</td>
+                <td class="px-5 py-3 text-gray-600">{{ log.action }}</td>
+                <td class="px-5 py-3 text-gray-600">{{ log.target }}</td>
+                <td class="px-5 py-3 text-gray-500 max-w-xs truncate">{{ log.details }}</td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="5" class="px-5 py-8 text-center text-gray-400">Нет записей</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if logs.pages > 1 %}
+<div class="mt-4 flex justify-center gap-2">
+    {% if logs.has_prev %}
+    <a href="?page={{ logs.prev_num }}" class="px-3 py-1 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">Назад</a>
+    {% endif %}
+    <span class="px-3 py-1 text-sm text-gray-500">{{ logs.page }} / {{ logs.pages }}</span>
+    {% if logs.has_next %}
+    <a href="?page={{ logs.next_num }}" class="px-3 py-1 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">Далее</a>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}

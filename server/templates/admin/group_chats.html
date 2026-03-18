@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}Групповые чаты — N8n Chat{% endblock %}
+{% block page_title %}Групповые чаты{% endblock %}
+
+{% block content %}
+<div class="mb-4 flex justify-between items-center">
+    <p class="text-sm text-gray-500">Чаты с несколькими участниками</p>
+    <a href="{{ url_for('views.group_chat_new') }}"
+       class="bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary-700 transition-colors">
+        + Новый групповой чат
+    </a>
+</div>
+
+<div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+    <table class="w-full text-sm">
+        <thead>
+            <tr class="border-b border-gray-200 bg-gray-50">
+                <th class="text-left px-5 py-3 font-medium text-gray-500">Название</th>
+                <th class="text-left px-5 py-3 font-medium text-gray-500">Бот</th>
+                <th class="text-left px-5 py-3 font-medium text-gray-500">Участники</th>
+                <th class="text-left px-5 py-3 font-medium text-gray-500">Обновлён</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+            {% for chat in chats.items %}
+            <tr class="hover:bg-gray-50 cursor-pointer" onclick="window.location='{{ url_for('views.group_chat_edit', chat_id=chat.id) }}'">
+                <td class="px-5 py-3 font-medium text-gray-900">{{ chat.title }}</td>
+                <td class="px-5 py-3 text-gray-600">{{ chat.bot.name }}</td>
+                <td class="px-5 py-3 text-gray-500">{{ chat.members|length }}</td>
+                <td class="px-5 py-3 text-gray-500">{{ chat.updated_at.strftime('%d.%m.%Y %H:%M') if chat.updated_at else '' }}</td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="4" class="px-5 py-8 text-center text-gray-400">Нет групповых чатов</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if chats.pages > 1 %}
+<div class="mt-4 flex justify-center gap-2">
+    {% if chats.has_prev %}
+    <a href="?page={{ chats.prev_num }}" class="px-3 py-1 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">Назад</a>
+    {% endif %}
+    <span class="px-3 py-1 text-sm text-gray-500">{{ chats.page }} / {{ chats.pages }}</span>
+    {% if chats.has_next %}
+    <a href="?page={{ chats.next_num }}" class="px-3 py-1 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">Далее</a>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}

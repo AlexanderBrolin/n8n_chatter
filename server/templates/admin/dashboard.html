@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard — N8n Chat{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block content %}
+<!-- Stats -->
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+    <div class="bg-white rounded-xl border border-gray-200 p-5">
+        <div class="text-sm text-gray-500 mb-1">Боты</div>
+        <div class="text-2xl font-bold text-gray-900">{{ stats.bots }}</div>
+        <div class="text-xs text-green-600 mt-1">{{ stats.bots_active }} активных</div>
+    </div>
+    <div class="bg-white rounded-xl border border-gray-200 p-5">
+        <div class="text-sm text-gray-500 mb-1">Пользователи</div>
+        <div class="text-2xl font-bold text-gray-900">{{ stats.users }}</div>
+    </div>
+    <div class="bg-white rounded-xl border border-gray-200 p-5">
+        <div class="text-sm text-gray-500 mb-1">Диалоги</div>
+        <div class="text-2xl font-bold text-gray-900">{{ stats.conversations }}</div>
+    </div>
+    <div class="bg-white rounded-xl border border-gray-200 p-5">
+        <div class="text-sm text-gray-500 mb-1">Сообщения</div>
+        <div class="text-2xl font-bold text-gray-900">{{ stats.messages }}</div>
+    </div>
+</div>
+
+<!-- Recent audit -->
+<div class="bg-white rounded-xl border border-gray-200">
+    <div class="px-5 py-4 border-b border-gray-200">
+        <h2 class="text-sm font-semibold text-gray-900">Последние действия</h2>
+    </div>
+    <div class="divide-y divide-gray-100">
+        {% for log in recent_logs %}
+        <div class="px-5 py-3 flex items-center gap-4">
+            <div class="text-xs text-gray-400 w-36 shrink-0">{{ log.timestamp.strftime('%d.%m.%Y %H:%M') }}</div>
+            <div class="text-sm text-gray-700">
+                <span class="font-medium">{{ log.actor }}</span> —
+                <span class="text-gray-500">{{ log.action }}</span>
+                {% if log.target %}<span class="text-gray-600"> {{ log.target }}</span>{% endif %}
+            </div>
+        </div>
+        {% else %}
+        <div class="px-5 py-8 text-center text-sm text-gray-400">Нет действий</div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

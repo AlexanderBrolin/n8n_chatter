@@ -32,8 +32,7 @@ export class N8nFrontApi implements ICredentialType {
 
 	test: ICredentialTestRequest = {
 		request: {
-			baseURL: '={{$credentials.baseUrl}}',
-			url: '/api/bot/{{$credentials.botToken}}/getMe',
+			url: '={{$credentials.baseUrl.replace(/\\/+$/, "") + "/api/bot/" + $credentials.botToken + "/getMe"}}',
 			method: 'GET',
 		},
 	};

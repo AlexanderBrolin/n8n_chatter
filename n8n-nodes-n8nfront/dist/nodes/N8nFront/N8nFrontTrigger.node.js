@@ -80,7 +80,7 @@ class N8nFrontTrigger {
                     try {
                         const response = await this.helpers.httpRequest({
                             method: 'GET',
-                            url: `${credentials.baseUrl}/api/bot/${credentials.botToken}/getWebhookInfo`,
+                            url: `${credentials.baseUrl.replace(/\/+$/, "")}/api/bot/${credentials.botToken}/getWebhookInfo`,
                         });
                         return response?.result?.url === webhookUrl;
                     }
@@ -93,7 +93,7 @@ class N8nFrontTrigger {
                     const webhookUrl = this.getNodeWebhookUrl('default');
                     await this.helpers.httpRequest({
                         method: 'POST',
-                        url: `${credentials.baseUrl}/api/bot/${credentials.botToken}/setWebhook`,
+                        url: `${credentials.baseUrl.replace(/\/+$/, "")}/api/bot/${credentials.botToken}/setWebhook`,
                         body: { url: webhookUrl },
                         headers: { 'Content-Type': 'application/json' },
                     });
@@ -104,7 +104,7 @@ class N8nFrontTrigger {
                     try {
                         await this.helpers.httpRequest({
                             method: 'POST',
-                            url: `${credentials.baseUrl}/api/bot/${credentials.botToken}/deleteWebhook`,
+                            url: `${credentials.baseUrl.replace(/\/+$/, "")}/api/bot/${credentials.botToken}/deleteWebhook`,
                         });
                     }
                     catch {

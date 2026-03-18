@@ -28,8 +28,7 @@ class N8nFrontApi {
         ];
         this.test = {
             request: {
-                baseURL: '={{$credentials.baseUrl}}',
-                url: '/api/bot/{{$credentials.botToken}}/getMe',
+                url: '={{$credentials.baseUrl.replace(/\\/+$/, "") + "/api/bot/" + $credentials.botToken + "/getMe"}}',
                 method: 'GET',
             },
         };

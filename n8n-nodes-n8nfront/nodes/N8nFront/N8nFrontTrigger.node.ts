@@ -86,7 +86,7 @@ export class N8nFrontTrigger implements INodeType {
 				try {
 					const response = await this.helpers.httpRequest({
 						method: 'GET',
-						url: `${credentials.baseUrl}/api/bot/${credentials.botToken}/getWebhookInfo`,
+						url: `${(credentials.baseUrl as string).replace(/\/+$/, "")}/api/bot/${credentials.botToken}/getWebhookInfo`,
 					});
 					return response?.result?.url === webhookUrl;
 				} catch {
@@ -100,7 +100,7 @@ export class N8nFrontTrigger implements INodeType {
 
 				await this.helpers.httpRequest({
 					method: 'POST',
-					url: `${credentials.baseUrl}/api/bot/${credentials.botToken}/setWebhook`,
+					url: `${(credentials.baseUrl as string).replace(/\/+$/, "")}/api/bot/${credentials.botToken}/setWebhook`,
 					body: { url: webhookUrl },
 					headers: { 'Content-Type': 'application/json' },
 				});
@@ -114,7 +114,7 @@ export class N8nFrontTrigger implements INodeType {
 				try {
 					await this.helpers.httpRequest({
 						method: 'POST',
-						url: `${credentials.baseUrl}/api/bot/${credentials.botToken}/deleteWebhook`,
+						url: `${(credentials.baseUrl as string).replace(/\/+$/, "")}/api/bot/${credentials.botToken}/deleteWebhook`,
 					});
 				} catch {
 					// Ignore errors on cleanup

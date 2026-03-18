@@ -214,6 +214,18 @@ npm install n8n-nodes-n8nfront
 
 ---
 
+##### Ответить на callback (`answerCallbackQuery`)
+
+Подтверждает нажатие inline-кнопки. Аналог `answerCallbackQuery` в Telegram Bot API.
+
+| Параметр | Обязателен | Описание |
+|----------|:----------:|----------|
+| Callback Query ID | да | ID callback-запроса: `{{ $json.callback_query.id }}` |
+
+**Типичный сценарий:** пользователь нажимает кнопку → Trigger получает callback_query → answerCallbackQuery подтверждает нажатие → далее обработка.
+
+---
+
 ##### Информация о боте (`getMe`)
 
 Возвращает информацию о текущем боте (id, имя, username). Параметров нет.
@@ -274,9 +286,11 @@ N8nFront Trigger → N8nFront (downloadFile) → Spreadsheet File → Code → N
 ### Бот с кнопками подтверждения
 
 ```
-N8nFront Trigger → IF (callback?) → [Да] N8nFront (editMessageText)
+N8nFront Trigger → IF (callback?) → [Да] N8nFront (answerCallbackQuery) → N8nFront (editMessageText)
                                    → [Нет] N8nFront (sendMessage + reply_markup)
 ```
+- answerCallbackQuery: Callback Query ID = `{{ $json.callback_query.id }}`
+- editMessageText: Chat ID = `{{ $json.callback_query.message.chat.id }}`, Message ID = `{{ $json.callback_query.message.message_id }}`
 
 ---
 

@@ -58,6 +58,12 @@ const operationFields = [
                 description: 'Показать индикатор «бот печатает...» в чате',
             },
             {
+                name: 'Ответить на callback',
+                value: 'answerCallbackQuery',
+                action: 'Подтвердить нажатие инлайн-кнопки',
+                description: 'Подтвердить нажатие inline-кнопки (Telegram-совместимый answerCallbackQuery)',
+            },
+            {
                 name: 'Информация о боте',
                 value: 'getMe',
                 action: 'Получить информацию о боте',
@@ -161,6 +167,16 @@ const operationFields = [
         default: 'data',
         description: 'Имя бинарного свойства, куда будет записан скачанный файл',
         displayOptions: { show: { operation: ['downloadFile'] } },
+    },
+    // --- answerCallbackQuery ---
+    {
+        displayName: 'Callback Query ID',
+        name: 'callbackQueryId',
+        type: 'string',
+        default: '',
+        required: true,
+        description: 'ID callback-запроса. Берётся из триггера: {{ $json.callback_query.id }}',
+        displayOptions: { show: { operation: ['answerCallbackQuery'] } },
     },
 ];
 class N8nFront {
@@ -272,6 +288,18 @@ class N8nFront {
                         body: {
                             chat_id: chatId,
                             action: 'typing',
+                        },
+                        headers: { 'Content-Type': 'application/json' },
+                    });
+                    returnData.push({ json: response });
+                }
+                else if (operation === 'answerCallbackQuery') {
+                    const callbackQueryId = this.getNodeParameter('callbackQueryId', i);
+                    const response = await this.helpers.httpRequest({
+                        method: 'POST',
+                        url: `${apiBase}/answerCallbackQuery`,
+                        body: {
+                            callback_query_id: callbackQueryId,
                         },
                         headers: { 'Content-Type': 'application/json' },
                     });

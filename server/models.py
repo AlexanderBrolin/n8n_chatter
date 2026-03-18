@@ -62,7 +62,7 @@ class Bot(db.Model):
     name = db.Column(db.String(128), nullable=False)
     username = db.Column(db.String(64), unique=True, nullable=False)
     description = db.Column(db.Text, default="")
-    webhook_url = db.Column(db.String(512), nullable=False)
+    webhook_url = db.Column(db.String(512), nullable=False, default="")
     api_token = db.Column(db.String(256), unique=True, nullable=False)
     avatar_url = db.Column(db.String(512), default="")
     is_active = db.Column(db.Boolean, default=True)

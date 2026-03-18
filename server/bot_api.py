@@ -323,6 +323,19 @@ def delete_message(token):
     return jsonify({"ok": True, "result": True})
 
 
+@bot_api_bp.route("/<token>/answerCallbackQuery", methods=["POST"])
+@bot_from_token
+def answer_callback_query(token):
+    """Telegram-compatible answerCallbackQuery — acknowledges a callback button press."""
+    data = request.get_json(silent=True) or request.form
+    callback_query_id = data.get("callback_query_id")
+
+    if not callback_query_id:
+        return jsonify({"ok": False, "error_code": 400, "description": "callback_query_id is required"}), 400
+
+    return jsonify({"ok": True, "result": True})
+
+
 @bot_api_bp.route("/<token>/sendChatAction", methods=["POST"])
 @bot_from_token
 def send_chat_action(token):

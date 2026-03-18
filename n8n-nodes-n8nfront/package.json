@@ -1,6 +1,6 @@
 {
 	"name": "n8n-nodes-n8nfront",
-	"version": "2.1.0",
+	"version": "2.1.1",
 	"description": "n8n community nodes for N8nFront chat platform — Telegram-compatible Bot API",
 	"license": "MIT",
 	"author": {

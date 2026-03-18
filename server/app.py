@@ -40,12 +40,30 @@ def create_app(config_class="server.config.Config"):
             return {"current_admin": db.session.get(AdminUser, admin_id)}
         return {"current_admin": None}
 
+    @app.route("/")
+    def root():
+        from flask import redirect, url_for
+        return redirect(url_for("chat_views.chat_page"))
+
     from server.sse import sse_broker
     sse_broker.init_app(app)
 
     with app.app_context():
         db.create_all()
         os.makedirs(app.config.get("UPLOAD_FOLDER", "server/static/uploads"), exist_ok=True)
+
+        # Auto-seed default admin if none exists
+        from server.models import AdminUser
+        from werkzeug.security import generate_password_hash
+
+        if not AdminUser.query.first():
+            admin = AdminUser(
+                username="admin",
+                password_hash=generate_password_hash("admin"),
+                is_superadmin=True,
+            )
+            db.session.add(admin)
+            db.session.commit()
 
     from server.seed import register_cli
 

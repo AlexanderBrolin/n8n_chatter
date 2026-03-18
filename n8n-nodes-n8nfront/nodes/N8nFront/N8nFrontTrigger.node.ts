@@ -57,6 +57,16 @@ export class N8nFrontTrigger implements INodeType {
 						description: 'Пользователь отправил изображение',
 					},
 					{
+						name: 'Голосовое сообщение',
+						value: 'voice',
+						description: 'Пользователь отправил голосовое сообщение',
+					},
+					{
+						name: 'Видео-кружок',
+						value: 'video_note',
+						description: 'Пользователь отправил видео-кружок',
+					},
+					{
 						name: 'Callback (инлайн-кнопка)',
 						value: 'callback_query',
 						description: 'Пользователь нажал инлайн-кнопку',
@@ -126,6 +136,8 @@ export class N8nFrontTrigger implements INodeType {
 				date?: number;
 				document?: { file_id?: string; file_name?: string; file_size?: number; mime_type?: string };
 				photo?: Array<{ file_id?: string; file_size?: number }>;
+				voice?: { file_id?: string; duration?: number; file_size?: number; mime_type?: string };
+				video_note?: { file_id?: string; length?: number; duration?: number; file_size?: number };
 			};
 			callback_query?: {
 				id?: string;
@@ -153,7 +165,9 @@ export class N8nFrontTrigger implements INodeType {
 			const msg = body.message;
 			const hasDocument = !!msg.document;
 			const hasPhoto = msg.photo && msg.photo.length > 0;
-			const isText = !hasDocument && !hasPhoto;
+			const hasVoice = !!msg.voice;
+			const hasVideoNote = !!msg.video_note;
+			const isText = !hasDocument && !hasPhoto && !hasVoice && !hasVideoNote;
 
 			if (isText && !events.includes('message')) {
 				return { noWebhookResponse: true };
@@ -162,6 +176,12 @@ export class N8nFrontTrigger implements INodeType {
 				return { noWebhookResponse: true };
 			}
 			if (hasPhoto && !events.includes('photo')) {
+				return { noWebhookResponse: true };
+			}
+			if (hasVoice && !events.includes('voice')) {
+				return { noWebhookResponse: true };
+			}
+			if (hasVideoNote && !events.includes('video_note')) {
 				return { noWebhookResponse: true };
 			}
 		}

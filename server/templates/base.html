@@ -105,12 +105,12 @@
         {% if current_admin %}
         <div class="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200">
             <div class="flex items-center justify-between">
-                <div class="flex items-center gap-2">
+                <a href="{{ url_for('auth.profile') }}" class="flex items-center gap-2 hover:opacity-80 transition-opacity" title="Профиль">
                     <div class="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center text-sm font-medium text-gray-600">
                         {{ current_admin.username[0]|upper }}
                     </div>
                     <span class="text-sm font-medium text-gray-700">{{ current_admin.username }}</span>
-                </div>
+                </a>
                 <a href="{{ url_for('auth.logout') }}" class="text-gray-400 hover:text-gray-600" title="Выйти">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>

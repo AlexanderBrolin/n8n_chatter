@@ -34,6 +34,39 @@ def logout():
     return redirect(url_for("auth.login_page"))
 
 
+@auth_bp.route("/profile", methods=["GET", "POST"])
+def profile():
+    if not session.get("admin_logged_in"):
+        return redirect(url_for("auth.login_page"))
+    admin = get_current_admin()
+    if not admin:
+        session.clear()
+        return redirect(url_for("auth.login_page"))
+
+    if request.method == "POST":
+        current_password = request.form.get("current_password", "")
+        new_password = request.form.get("new_password", "")
+        confirm_password = request.form.get("confirm_password", "")
+
+        if not check_password_hash(admin.password_hash, current_password):
+            flash("Неверный текущий пароль", "error")
+            return redirect(url_for("auth.profile"))
+        if len(new_password) < 6:
+            flash("Новый пароль должен быть не менее 6 символов", "error")
+            return redirect(url_for("auth.profile"))
+        if new_password != confirm_password:
+            flash("Пароли не совпадают", "error")
+            return redirect(url_for("auth.profile"))
+
+        admin.password_hash = generate_password_hash(new_password)
+        db.session.commit()
+        audit_log(admin.username, "change_password", "admin", admin.username)
+        flash("Пароль успешно изменён", "success")
+        return redirect(url_for("auth.profile"))
+
+    return render_template("admin/profile.html", admin=admin)
+
+
 # --- Decorators ---
 
 

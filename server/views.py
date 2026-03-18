@@ -49,7 +49,7 @@ def bot_new():
         description = request.form.get("description", "").strip()
         webhook_url = request.form.get("webhook_url", "").strip()
 
-        if not name or not username or not webhook_url:
+        if not name or not username:
             flash("Заполните все обязательные поля.", "error")
             return render_template("admin/bot_edit.html", bot=None)
 

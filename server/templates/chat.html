@@ -407,9 +407,14 @@
                     <div x-show="selectedFiles.length > 0" class="mb-2 flex flex-wrap gap-2">
                         <template x-for="(file, idx) in selectedFiles" :key="idx">
                             <div class="flex items-center gap-1.5 bg-gray-100 rounded-lg px-2.5 py-1.5 text-xs text-gray-700">
-                                <svg class="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/>
-                                </svg>
+                                <template x-if="file.type && file.type.startsWith('image/')">
+                                    <img :src="URL.createObjectURL(file)" class="w-8 h-8 rounded object-cover shrink-0">
+                                </template>
+                                <template x-if="!file.type || !file.type.startsWith('image/')">
+                                    <svg class="w-3.5 h-3.5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/>
+                                    </svg>
+                                </template>
                                 <span class="max-w-[120px] truncate" x-text="file.name"></span>
                                 <span class="text-gray-400" x-text="'(' + formatSize(file.size) + ')'"></span>
                                 <button @click="removeFile(idx)" class="text-gray-400 hover:text-gray-600">
@@ -433,6 +438,7 @@
 
                         <textarea x-model="newMessage"
                                   @keydown.enter="if (!$event.shiftKey) { $event.preventDefault(); sendMessage() }"
+                                  @paste="handlePaste($event)"
                                   placeholder="Написать сообщение..."
                                   rows="1"
                                   :disabled="sending"
@@ -1110,6 +1116,44 @@ function chatApp() {
 
             this.selectedFiles = [...this.selectedFiles, ...accepted];
             event.target.value = '';
+        },
+
+        handlePaste(event) {
+            const items = event.clipboardData?.items;
+            if (!items) return;
+
+            const pastedFiles = [];
+            for (const item of items) {
+                if (item.kind !== 'file') continue;
+                const file = item.getAsFile();
+                if (!file) continue;
+
+                let pasteFile = file;
+                if (file.type.startsWith('image/') && (!file.name || file.name === 'image.png')) {
+                    const now = new Date();
+                    const ts = now.getFullYear().toString() +
+                        String(now.getMonth() + 1).padStart(2, '0') +
+                        String(now.getDate()).padStart(2, '0') + '_' +
+                        String(now.getHours()).padStart(2, '0') +
+                        String(now.getMinutes()).padStart(2, '0') +
+                        String(now.getSeconds()).padStart(2, '0');
+                    const ext = file.type.split('/')[1] || 'png';
+                    pasteFile = new File([file], `paste_${ts}.${ext}`, { type: file.type });
+                }
+
+                if (pasteFile.size > MAX_FILE_SIZE) {
+                    this.fileSizeError = `Файл превышает лимит 50 МБ: ${pasteFile.name}`;
+                    setTimeout(() => { this.fileSizeError = ''; }, 5000);
+                    continue;
+                }
+
+                pastedFiles.push(pasteFile);
+            }
+
+            if (pastedFiles.length > 0) {
+                event.preventDefault();
+                this.selectedFiles = [...this.selectedFiles, ...pastedFiles];
+            }
         },
 
         removeFile(idx) {

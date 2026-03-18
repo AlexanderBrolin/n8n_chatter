@@ -63,6 +63,22 @@ def build_update_payload(message, conversation, user, bot):
                         "file_size": att.file_size,
                     }
                 )
+            elif att.mime_type and att.mime_type.startswith("audio/"):
+                payload["message"]["voice"] = {
+                    "file_id": att.file_id,
+                    "file_unique_id": att.file_id,
+                    "duration": 0,
+                    "file_size": att.file_size,
+                    "mime_type": att.mime_type,
+                }
+            elif att.mime_type and att.mime_type.startswith("video/"):
+                payload["message"]["video_note"] = {
+                    "file_id": att.file_id,
+                    "file_unique_id": att.file_id,
+                    "length": 0,
+                    "duration": 0,
+                    "file_size": att.file_size,
+                }
             else:
                 payload["message"]["document"] = doc_info
 

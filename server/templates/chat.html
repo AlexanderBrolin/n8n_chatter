@@ -304,7 +304,17 @@
                                                                          class="max-w-full rounded-lg max-h-64 cursor-pointer">
                                                                 </a>
                                                             </template>
-                                                            <template x-if="!isImage(att.mime_type)">
+                                                            <template x-if="isAudio(att.mime_type)">
+                                                                <div class="flex items-center gap-2 p-2 rounded-lg"
+                                                                     :class="msg.sender_type === 'user' && msg.sender_id === CURRENT_USER_ID ? 'bg-primary-700/30' : 'bg-white border border-gray-200'">
+                                                                    <svg class="w-5 h-5 shrink-0" :class="msg.sender_type === 'user' && msg.sender_id === CURRENT_USER_ID ? 'text-white/80' : 'text-gray-400'" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4M12 15a3 3 0 003-3V5a3 3 0 00-6 0v7a3 3 0 003 3z"/>
+                                                                    </svg>
+                                                                    <audio controls preload="none" class="h-8 max-w-[200px]"
+                                                                           :src="'/chat/api/file/' + att.file_id"></audio>
+                                                                </div>
+                                                            </template>
+                                                            <template x-if="!isImage(att.mime_type) && !isAudio(att.mime_type)">
                                                                 <a :href="'/chat/api/file/' + att.file_id"
                                                                    class="flex items-center gap-2 p-2 rounded-lg transition-colors"
                                                                    :class="msg.sender_type === 'user' && msg.sender_id === CURRENT_USER_ID ? 'bg-primary-700/30 hover:bg-primary-700/50' : 'bg-white hover:bg-gray-50 border border-gray-200'">
@@ -430,7 +440,38 @@
                                   x-ref="messageInput"
                                   @input="autoResize($el)"></textarea>
 
-                        <button @click="sendMessage()"
+                        <!-- Voice recording indicator -->
+                        <template x-if="isRecording">
+                            <div class="flex items-center gap-2 px-3 py-1.5 bg-red-50 border border-red-200 rounded-xl text-sm">
+                                <span class="w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse"></span>
+                                <span class="text-red-600 font-mono text-xs" x-text="recordingDuration"></span>
+                                <button @click="cancelRecording()" class="text-gray-400 hover:text-red-500 ml-1" title="Отменить">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                    </svg>
+                                </button>
+                                <button @click="stopRecording()" class="bg-red-500 text-white p-1.5 rounded-lg hover:bg-red-600" title="Отправить">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+                                    </svg>
+                                </button>
+                            </div>
+                        </template>
+
+                        <!-- Mic button (shown when no text entered and not recording) -->
+                        <button x-show="!newMessage.trim() && selectedFiles.length === 0 && !isRecording"
+                                @click="startRecording()"
+                                :disabled="sending"
+                                class="text-gray-400 hover:text-red-500 p-2 rounded-xl hover:bg-red-50 transition-colors shrink-0 disabled:opacity-50"
+                                title="Записать голосовое">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4M12 15a3 3 0 003-3V5a3 3 0 00-6 0v7a3 3 0 003 3z"/>
+                            </svg>
+                        </button>
+
+                        <!-- Send button (shown when there's text/files and not recording) -->
+                        <button x-show="(newMessage.trim() || selectedFiles.length > 0) && !isRecording"
+                                @click="sendMessage()"
                                 :disabled="sending || (!newMessage.trim() && selectedFiles.length === 0)"
                                 class="bg-primary-600 text-white p-2 rounded-xl hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0">
                             <svg x-show="!sending" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -505,6 +546,13 @@ function chatApp() {
         _searchTimer: null,
         // Quick replies
         quickReplies: [],
+        // Voice recording
+        isRecording: false,
+        _mediaRecorder: null,
+        _audioChunks: [],
+        _recordingStartTime: null,
+        recordingDuration: '0:00',
+        _recordingTimer: null,
 
         async init() {
             await Promise.all([this.loadConversations(), this.loadBots()]);
@@ -959,6 +1007,86 @@ function chatApp() {
             }
         },
 
+        // --- Voice recording ---
+
+        async startRecording() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                this._audioChunks = [];
+                this._mediaRecorder = new MediaRecorder(stream, {
+                    mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+                        ? 'audio/webm;codecs=opus' : 'audio/webm'
+                });
+                this._mediaRecorder.ondataavailable = (e) => {
+                    if (e.data.size > 0) this._audioChunks.push(e.data);
+                };
+                this._mediaRecorder.onstop = () => {
+                    stream.getTracks().forEach(t => t.stop());
+                    this._sendVoice();
+                };
+                this._mediaRecorder.start();
+                this.isRecording = true;
+                this._recordingStartTime = Date.now();
+                this._recordingTimer = setInterval(() => {
+                    const sec = Math.floor((Date.now() - this._recordingStartTime) / 1000);
+                    this.recordingDuration = Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
+                }, 500);
+            } catch (e) {
+                console.error('Microphone access denied:', e);
+            }
+        },
+
+        stopRecording() {
+            if (this._mediaRecorder && this._mediaRecorder.state === 'recording') {
+                this._mediaRecorder.stop();
+            }
+            this.isRecording = false;
+            clearInterval(this._recordingTimer);
+            this.recordingDuration = '0:00';
+        },
+
+        cancelRecording() {
+            if (this._mediaRecorder && this._mediaRecorder.state === 'recording') {
+                this._mediaRecorder.ondataavailable = null;
+                this._mediaRecorder.onstop = () => {
+                    this._mediaRecorder.stream.getTracks().forEach(t => t.stop());
+                };
+                this._mediaRecorder.stop();
+            }
+            this._audioChunks = [];
+            this.isRecording = false;
+            clearInterval(this._recordingTimer);
+            this.recordingDuration = '0:00';
+        },
+
+        async _sendVoice() {
+            if (this._audioChunks.length === 0 || !this.activeConversation) return;
+            const blob = new Blob(this._audioChunks, { type: 'audio/webm' });
+            if (blob.size < 1000) return; // too short
+            this.sending = true;
+            const formData = new FormData();
+            formData.append('files', blob, 'voice.webm');
+            try {
+                const resp = await fetch(`/chat/api/conversations/${this.activeConversation.id}/send`, {
+                    method: 'POST',
+                    body: formData,
+                });
+                if (resp.ok) {
+                    const msg = await resp.json();
+                    if (!this.messages.find(m => m.id === msg.id)) {
+                        this.messages.push(msg);
+                    }
+                    this.$nextTick(() => this.scrollToBottom());
+                    this.updateConversationPreview(this.activeConversation.id, msg);
+                }
+            } catch (e) {
+                console.error('Voice send error:', e);
+            } finally {
+                this.sending = false;
+                this._audioChunks = [];
+            }
+        },
+
         // --- File handling ---
 
         onFilesSelected(event) {
@@ -1015,6 +1143,10 @@ function chatApp() {
 
         isImage(mimeType) {
             return mimeType && mimeType.startsWith('image/');
+        },
+
+        isAudio(mimeType) {
+            return mimeType && mimeType.startsWith('audio/');
         },
 
         renderMarkdown(text) {

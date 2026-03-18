@@ -53,6 +53,16 @@ class N8nFrontTrigger {
                             description: 'Пользователь отправил изображение',
                         },
                         {
+                            name: 'Голосовое сообщение',
+                            value: 'voice',
+                            description: 'Пользователь отправил голосовое сообщение',
+                        },
+                        {
+                            name: 'Видео-кружок',
+                            value: 'video_note',
+                            description: 'Пользователь отправил видео-кружок',
+                        },
+                        {
                             name: 'Callback (инлайн-кнопка)',
                             value: 'callback_query',
                             description: 'Пользователь нажал инлайн-кнопку',
@@ -122,7 +132,9 @@ class N8nFrontTrigger {
             const msg = body.message;
             const hasDocument = !!msg.document;
             const hasPhoto = msg.photo && msg.photo.length > 0;
-            const isText = !hasDocument && !hasPhoto;
+            const hasVoice = !!msg.voice;
+            const hasVideoNote = !!msg.video_note;
+            const isText = !hasDocument && !hasPhoto && !hasVoice && !hasVideoNote;
             if (isText && !events.includes('message')) {
                 return { noWebhookResponse: true };
             }
@@ -130,6 +142,12 @@ class N8nFrontTrigger {
                 return { noWebhookResponse: true };
             }
             if (hasPhoto && !events.includes('photo')) {
+                return { noWebhookResponse: true };
+            }
+            if (hasVoice && !events.includes('voice')) {
+                return { noWebhookResponse: true };
+            }
+            if (hasVideoNote && !events.includes('video_note')) {
                 return { noWebhookResponse: true };
             }
         }

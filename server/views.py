@@ -298,9 +298,20 @@ def user_action(user_id):
         audit_log(actor, "toggle_block_user", user.username, status)
         flash(f"Пользователь {status}.", "success")
     elif action == "delete":
+        from server.models import PushSubscription, Message
+        username = user.username
+        # Удалить push-подписки
+        PushSubscription.query.filter_by(user_id=user.id).delete()
+        # Удалить сообщения и диалоги пользователя
+        for conv in list(user.conversations):
+            Message.query.filter_by(conversation_id=conv.id).delete()
+            db.session.delete(conv)
+        # Очистить членство в групповых чатах и доступ к ботам
+        user.group_conversations.clear()
+        user.bots.clear()
         db.session.delete(user)
         db.session.commit()
-        audit_log(actor, "delete_user", user.username)
+        audit_log(actor, "delete_user", username)
         flash("Пользователь удалён.", "success")
         return redirect(url_for("views.users"))
 

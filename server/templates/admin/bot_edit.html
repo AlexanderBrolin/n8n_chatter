@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{{ 'Редактирование бота' if bot else 'Новый бот' }} — N8n Chat{% endblock %}
+{% block title %}{{ 'Редактирование бота' if bot else 'Новый бот' }} — Chatter{% endblock %}
 {% block page_title %}{{ 'Редактирование бота' if bot else 'Новый бот' }}{% endblock %}
 
 {% block content %}
@@ -64,23 +64,34 @@
 
         {% if bot %}
         <!-- Token info -->
-        <div class="bg-white rounded-xl border border-gray-200 p-6" x-data="{ showToken: false }">
+        <div class="bg-white rounded-xl border border-gray-200 p-6" x-data="{ showToken: false, showUrl: false }">
             <label class="block text-sm font-medium text-gray-700 mb-1.5">API Токен</label>
             <div class="flex gap-2">
                 <input :type="showToken ? 'text' : 'password'" value="{{ bot.api_token }}" readonly
-                       class="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-600 font-mono">
+                       class="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-600 font-mono min-w-0">
                 <button type="button" @click="showToken = !showToken"
-                        class="px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">
+                        class="px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 shrink-0">
                     <span x-text="showToken ? 'Скрыть' : 'Показать'"></span>
                 </button>
                 <button type="button" @click="navigator.clipboard.writeText('{{ bot.api_token }}')"
-                        class="px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">
+                        class="px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 shrink-0">
                     Копировать
                 </button>
             </div>
-            <p class="text-xs text-gray-400 mt-2">
-                Bot API URL: <code class="bg-gray-100 px-1 rounded">{{ request.host_url }}api/bot/{{ bot.api_token }}/</code>
-            </p>
+
+            <label class="block text-sm font-medium text-gray-700 mb-1.5 mt-4">Bot API URL</label>
+            <div class="flex gap-2">
+                <input :type="showUrl ? 'text' : 'password'" value="{{ request.host_url }}api/bot/{{ bot.api_token }}/" readonly
+                       class="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-600 font-mono min-w-0">
+                <button type="button" @click="showUrl = !showUrl"
+                        class="px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 shrink-0">
+                    <span x-text="showUrl ? 'Скрыть' : 'Показать'"></span>
+                </button>
+                <button type="button" @click="navigator.clipboard.writeText('{{ request.host_url }}api/bot/{{ bot.api_token }}/')"
+                        class="px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 shrink-0">
+                    Копировать
+                </button>
+            </div>
         </div>
         {% endif %}
 

@@ -3,6 +3,7 @@ import queue
 from datetime import datetime, timezone
 
 from flask import Blueprint, Response, jsonify, request, send_from_directory, session, stream_with_context
+from werkzeug.security import generate_password_hash
 from sqlalchemy import func, or_
 
 from server.app import db
@@ -68,6 +69,31 @@ def _publish_to_conversation_users(conv, event_type, data):
 
 
 # --- Endpoints ---
+
+
+@chat_api_bp.route("/profile", methods=["GET", "POST"])
+@chat_login_required
+def profile():
+    """Get or update current user profile."""
+    user = request.chat_user
+    if request.method == "POST":
+        data = request.get_json(silent=True) or {}
+        user.first_name = data.get("first_name", user.first_name or "").strip()
+        user.last_name = data.get("last_name", user.last_name or "").strip()
+        new_password = data.get("password", "").strip()
+        if new_password:
+            if len(new_password) < 6:
+                return jsonify({"error": "Пароль должен быть не менее 6 символов"}), 400
+            user.password_hash = generate_password_hash(new_password)
+        db.session.commit()
+        return jsonify({"ok": True})
+    return jsonify({
+        "username": user.username,
+        "email": user.email or "",
+        "first_name": user.first_name or "",
+        "last_name": user.last_name or "",
+        "auth_provider": user.auth_provider or "local",
+    })
 
 
 @chat_api_bp.route("/bots")

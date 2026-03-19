@@ -9,7 +9,7 @@ from sqlalchemy import func, or_
 from server.app import db
 from server.chat_auth import chat_login_required
 from server.file_handler import get_upload_dir, save_upload
-from server.models import Bot, ChatUser, Conversation, FileAttachment, Message, QuickReply, conversation_members
+from server.models import Bot, ChatUser, Conversation, FileAttachment, Message, PushSubscription, QuickReply, conversation_members
 from server.sse import sse_broker
 from server.webhook import send_callback_webhook, send_webhook
 
@@ -442,6 +442,55 @@ def user_stream():
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@chat_api_bp.route("/vapid-public-key")
+@chat_login_required
+def vapid_public_key():
+    """Return the VAPID public key for push subscription."""
+    from flask import current_app
+    key = current_app.config.get("VAPID_PUBLIC_KEY", "")
+    if not key:
+        return jsonify({"error": "Push not configured"}), 503
+    return jsonify({"public_key": key})
+
+
+@chat_api_bp.route("/push/subscribe", methods=["POST"])
+@chat_login_required
+def push_subscribe():
+    """Save a push subscription for the current user."""
+    user = request.chat_user
+    data = request.get_json(silent=True) or {}
+    endpoint = data.get("endpoint")
+    keys = data.get("keys")
+    if not endpoint or not keys:
+        return jsonify({"error": "Missing endpoint or keys"}), 400
+
+    existing = PushSubscription.query.filter_by(endpoint=endpoint).first()
+    if existing:
+        existing.user_id = user.id
+        existing.keys_json = json.dumps(keys)
+    else:
+        sub = PushSubscription(
+            user_id=user.id,
+            endpoint=endpoint,
+            keys_json=json.dumps(keys),
+        )
+        db.session.add(sub)
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@chat_api_bp.route("/push/unsubscribe", methods=["POST"])
+@chat_login_required
+def push_unsubscribe():
+    """Remove a push subscription."""
+    data = request.get_json(silent=True) or {}
+    endpoint = data.get("endpoint")
+    if endpoint:
+        PushSubscription.query.filter_by(endpoint=endpoint).delete()
+        db.session.commit()
+    return jsonify({"ok": True})
 
 
 @chat_api_bp.route("/file/<file_id>")

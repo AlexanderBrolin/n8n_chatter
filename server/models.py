@@ -187,6 +187,23 @@ class QuickReply(db.Model):
         return f"<QuickReply {self.text[:30]}>"
 
 
+class PushSubscription(db.Model):
+    __tablename__ = "push_subscriptions"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("chat_users.id"), nullable=False)
+    endpoint = db.Column(db.Text, nullable=False, unique=True)
+    keys_json = db.Column(db.Text, nullable=False)
+    created_at = db.Column(
+        db.DateTime, default=lambda: datetime.now(timezone.utc)
+    )
+
+    user = db.relationship("ChatUser", backref="push_subscriptions")
+
+    def __repr__(self):
+        return f"<PushSubscription user={self.user_id}>"
+
+
 class AuditLog(db.Model):
     __tablename__ = "audit_log"
 

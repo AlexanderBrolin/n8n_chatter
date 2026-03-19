@@ -42,3 +42,6 @@ n8n-nodes-n8nfront/.npmrc
 n8n-nodes-n8nfront
 .env
 \[Brolin]\[Prod] PostCard (new year).json
+\[Lev] Сервис-бот.json
+\[Lev] Сервис-бот (Chatter).json
+\[Chatter] PostCard (new year).json

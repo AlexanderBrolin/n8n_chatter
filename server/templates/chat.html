@@ -404,18 +404,6 @@
                     </button>
                 </div>
 
-                <!-- Quick replies -->
-                <div x-show="quickReplies.length > 0" class="px-4 pb-1">
-                    <div class="flex flex-wrap gap-1.5">
-                        <template x-for="qr in quickReplies" :key="qr.id">
-                            <button @click="useQuickReply(qr.text)"
-                                    class="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs rounded-full transition-colors truncate max-w-[200px]"
-                                    x-text="qr.text">
-                            </button>
-                        </template>
-                    </div>
-                </div>
-
                 <!-- Input area -->
                 <div class="border-t border-gray-200 px-4 py-3 shrink-0">
                     <div x-show="selectedFiles.length > 0" class="mb-2 flex flex-wrap gap-2">
@@ -443,13 +431,40 @@
                     <div class="flex items-end gap-2">
                         <input type="file" x-ref="fileInput" multiple class="hidden" @change="onFilesSelected">
 
-                        <!-- Menu button (placeholder for future commands/emoji) -->
-                        <button class="text-gray-400 hover:text-gray-600 p-2 rounded-lg hover:bg-gray-100 transition-colors shrink-0"
-                                title="Меню">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
-                            </svg>
-                        </button>
+                        <!-- Menu button with quick replies dropdown -->
+                        <div class="relative shrink-0" x-show="activeConversation">
+                            <button @click="menuOpen = !menuOpen"
+                                    class="text-gray-400 hover:text-gray-600 p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                                    :class="menuOpen ? 'text-primary-600 bg-primary-50' : ''"
+                                    title="Меню">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                                </svg>
+                            </button>
+                            <div x-show="menuOpen" x-cloak
+                                 @click.away="menuOpen = false"
+                                 x-transition:enter="transition ease-out duration-100"
+                                 x-transition:enter-start="opacity-0 scale-95"
+                                 x-transition:enter-end="opacity-100 scale-100"
+                                 x-transition:leave="transition ease-in duration-75"
+                                 x-transition:leave-start="opacity-100 scale-100"
+                                 x-transition:leave-end="opacity-0 scale-95"
+                                 class="absolute bottom-full left-0 mb-2 bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[200px] max-w-[300px] z-50">
+                                <template x-if="quickReplies.length > 0">
+                                    <div>
+                                        <template x-for="qr in quickReplies" :key="qr.id">
+                                            <button @click="newMessage = qr.text; sendMessage(); menuOpen = false"
+                                                    class="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors truncate"
+                                                    x-text="qr.text">
+                                            </button>
+                                        </template>
+                                    </div>
+                                </template>
+                                <template x-if="quickReplies.length === 0">
+                                    <div class="px-3 py-2 text-xs text-gray-400">Нет быстрых ответов</div>
+                                </template>
+                            </div>
+                        </div>
 
                         <textarea x-model="newMessage"
                                   @keydown.enter="if (!$event.shiftKey) { $event.preventDefault(); sendMessage() }"
@@ -634,6 +649,7 @@ function chatApp() {
         _searchTimer: null,
         // Quick replies
         quickReplies: [],
+        menuOpen: false,
         // Voice recording
         isRecording: false,
         _mediaRecorder: null,
@@ -652,7 +668,30 @@ function chatApp() {
             await Promise.all([this.loadConversations(), this.loadBots()]);
             this.conversations.forEach(c => { c._unread = c._unread || 0; });
             this.connectUserSSE();
-            this.requestNotificationPermission();
+
+            // Register push notifications if permission already granted
+            if ('Notification' in window && Notification.permission === 'granted') {
+                this.registerPush();
+            }
+
+            // Reconnect SSE when tab becomes active again (browsers kill inactive SSE)
+            document.addEventListener('visibilitychange', () => {
+                if (!document.hidden) {
+                    if (this.activeConversation && !this.eventSource) {
+                        this.connectSSE(this.activeConversation.id);
+                    }
+                    if (!this.userEventSource) {
+                        this.connectUserSSE();
+                    }
+                    // Force reconnect if SSE exists but may be stale
+                    if (this.userEventSource && this.userEventSource.readyState === EventSource.CLOSED) {
+                        this.connectUserSSE();
+                    }
+                    if (this.activeConversation && this.eventSource && this.eventSource.readyState === EventSource.CLOSED) {
+                        this.connectSSE(this.activeConversation.id);
+                    }
+                }
+            });
         },
 
         async loadConversations() {
@@ -809,6 +848,7 @@ function chatApp() {
             if (!this.newMessage.trim() && this.selectedFiles.length === 0) return;
             if (!this.activeConversation) return;
 
+            this.requestNotificationPermission();
             this.sending = true;
             const formData = new FormData();
             if (this.newMessage.trim()) {
@@ -1048,7 +1088,39 @@ function chatApp() {
 
         requestNotificationPermission() {
             if ('Notification' in window && Notification.permission === 'default') {
-                Notification.requestPermission();
+                Notification.requestPermission().then(p => {
+                    if (p === 'granted') this.registerPush();
+                });
+            }
+        },
+
+        async registerPush() {
+            if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+            try {
+                const reg = await navigator.serviceWorker.register('/static/sw.js');
+                const resp = await fetch('/chat/api/vapid-public-key');
+                if (!resp.ok) return;
+                const { public_key } = await resp.json();
+                if (!public_key) return;
+
+                let sub = await reg.pushManager.getSubscription();
+                if (!sub) {
+                    const rawKey = atob(public_key.replace(/-/g, '+').replace(/_/g, '/'));
+                    const key = new Uint8Array(rawKey.length);
+                    for (let i = 0; i < rawKey.length; i++) key[i] = rawKey.charCodeAt(i);
+
+                    sub = await reg.pushManager.subscribe({
+                        userVisibleOnly: true,
+                        applicationServerKey: key,
+                    });
+                }
+                await fetch('/chat/api/push/subscribe', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(sub.toJSON()),
+                });
+            } catch (e) {
+                console.warn('Push registration failed:', e);
             }
         },
 

@@ -32,6 +32,19 @@ def _sso_flags():
     }
 
 
+def _ensure_public_bots(user):
+    """Add any active public bots that the user doesn't have yet."""
+    public_bots = Bot.query.filter_by(is_active=True, is_public=True).all()
+    current_bot_ids = {b.id for b in user.bots}
+    added = False
+    for bot in public_bots:
+        if bot.id not in current_bot_ids:
+            user.bots.append(bot)
+            added = True
+    if added:
+        db.session.commit()
+
+
 def _resolve_sso_user(email, provider, provider_id, first_name, last_name):
     """
     Find or create a ChatUser from SSO callback data.
@@ -51,6 +64,7 @@ def _resolve_sso_user(email, provider, provider_id, first_name, last_name):
         if not user.email and email:
             user.email = email
             db.session.commit()
+        _ensure_public_bots(user)
         return user
 
     # Step 2: Find by email (account linking)
@@ -58,6 +72,7 @@ def _resolve_sso_user(email, provider, provider_id, first_name, last_name):
     if user:
         setattr(user, provider_id_field, provider_id)
         db.session.commit()
+        _ensure_public_bots(user)
         return user
 
     # Step 3: Auto-create

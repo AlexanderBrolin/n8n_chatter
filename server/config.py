@@ -23,6 +23,11 @@ class Config:
         if d.strip()
     ]
 
+    # Web Push (VAPID)
+    VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "")
+    VAPID_PUBLIC_KEY = os.environ.get("VAPID_PUBLIC_KEY", "")
+    VAPID_CLAIMS_EMAIL = os.environ.get("VAPID_CLAIMS_EMAIL", "mailto:admin@example.com")
+
     # Keycloak OIDC
     KEYCLOAK_URL = os.environ.get("KEYCLOAK_URL", "")
     KEYCLOAK_REALM = os.environ.get("KEYCLOAK_REALM", "master")

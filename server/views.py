@@ -10,6 +10,19 @@ from server.models import AdminUser, AuditLog, Bot, ChatUser, Conversation, Mess
 views_bp = Blueprint("views", __name__)
 
 
+def _assign_bot_to_all_users(bot):
+    """Assign a public bot to all users who don't have it yet."""
+    users_with_bot = {u.id for u in bot.users}
+    all_users = ChatUser.query.all()
+    added = False
+    for user in all_users:
+        if user.id not in users_with_bot:
+            bot.users.append(user)
+            added = True
+    if added:
+        db.session.commit()
+
+
 # --- Dashboard ---
 
 
@@ -74,6 +87,8 @@ def bot_new():
         )
         db.session.add(bot)
         db.session.commit()
+        if is_public:
+            _assign_bot_to_all_users(bot)
         audit_log(
             admin.username if admin else "system",
             "create_bot",
@@ -99,8 +114,11 @@ def bot_edit(bot_id):
         bot.description = request.form.get("description", "").strip()
         bot.webhook_url = request.form.get("webhook_url", bot.webhook_url).strip()
         bot.avatar_url = request.form.get("avatar_url", "").strip()
+        was_public = bot.is_public
         bot.is_public = bool(request.form.get("is_public"))
         db.session.commit()
+        if bot.is_public and not was_public:
+            _assign_bot_to_all_users(bot)
 
         from server.auth import get_current_admin
 

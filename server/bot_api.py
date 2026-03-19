@@ -8,7 +8,7 @@ from flask import Blueprint, jsonify, request, send_from_directory
 
 from server.app import db
 from server.file_handler import get_upload_dir, save_upload
-from server.models import Bot, ChatUser, Conversation, FileAttachment, Message
+from server.models import Bot, ChatUser, Conversation, FileAttachment, Message, PushSubscription
 from server.sse import sse_broker
 
 bot_api_bp = Blueprint("bot_api", __name__)
@@ -114,6 +114,57 @@ def _publish_to_conversation_users(conv, event_type, data):
     """Publish SSE event to all users in a conversation."""
     for uid in conv.get_all_user_ids():
         sse_broker.publish_user(uid, event_type, data)
+    if event_type == "new_message":
+        _send_push_notifications(conv, data)
+
+
+def _send_push_notifications(conv, data):
+    """Send Web Push notifications to all users in a conversation."""
+    import logging
+    from flask import current_app
+
+    try:
+        from pywebpush import webpush, WebPushException
+    except ImportError:
+        return
+
+    logger = logging.getLogger(__name__)
+    vapid_private = current_app.config.get("VAPID_PRIVATE_KEY")
+    if not vapid_private:
+        return
+
+    msg_data = data.get("message", {})
+    bot_name = msg_data.get("sender_name", "")
+    text = (msg_data.get("text") or "")[:100]
+    payload = json.dumps({
+        "title": bot_name,
+        "body": text,
+        "conv_id": conv.id,
+    }, ensure_ascii=False)
+
+    claims_email = current_app.config.get("VAPID_CLAIMS_EMAIL", "mailto:admin@example.com")
+
+    for uid in conv.get_all_user_ids():
+        subs = PushSubscription.query.filter_by(user_id=uid).all()
+        for sub in subs:
+            try:
+                webpush(
+                    subscription_info={
+                        "endpoint": sub.endpoint,
+                        "keys": json.loads(sub.keys_json),
+                    },
+                    data=payload,
+                    vapid_private_key=vapid_private,
+                    vapid_claims={"sub": claims_email},
+                )
+            except WebPushException as e:
+                if e.response and e.response.status_code in (404, 410):
+                    db.session.delete(sub)
+                    db.session.commit()
+                else:
+                    logger.warning("Push failed for user %s: %s", uid, e)
+            except Exception as e:
+                logger.warning("Push failed for user %s: %s", uid, e)
 
 
 # --- Endpoints ---

@@ -136,6 +136,52 @@ location ~ /chat/api/conversations/.*/stream {
 }
 ```
 
+## Push-уведомления (Web Push)
+
+Платформа поддерживает push-уведомления через Web Push API — они приходят даже при неактивной вкладке или свёрнутом браузере.
+
+### 1. Установка зависимости
+
+```bash
+pip install pywebpush
+```
+
+Или при использовании Docker — зависимость уже включена в `requirements.txt`.
+
+### 2. Генерация VAPID-ключей
+
+```bash
+python -c "
+from py_vapid import Vapid
+v = Vapid()
+v.generate_keys()
+print('VAPID_PRIVATE_KEY=' + v.private_pem().decode().replace('\n', '\\\\n'))
+print('VAPID_PUBLIC_KEY=' + v.public_key)
+"
+```
+
+### 3. Настройка .env
+
+```env
+VAPID_PRIVATE_KEY=-----BEGIN EC PRIVATE KEY-----\nМного букв...\n-----END EC PRIVATE KEY-----
+VAPID_PUBLIC_KEY=BBase64-строка-публичного-ключа
+VAPID_CLAIMS_EMAIL=mailto:admin@your-domain.com
+```
+
+- `VAPID_PRIVATE_KEY` — приватный ключ (PEM-формат, переносы строк заменены на `\n`)
+- `VAPID_PUBLIC_KEY` — публичный ключ (base64url)
+- `VAPID_CLAIMS_EMAIL` — email для идентификации отправителя (формат `mailto:...`)
+
+### 4. Перезапуск
+
+```bash
+docker compose --env-file .env up -d --build
+```
+
+После перезапуска пользователи чата получат запрос на разрешение уведомлений. При согласии — push-уведомления будут приходить при каждом новом сообщении от бота.
+
+---
+
 ## Настройка SSO-авторизации
 
 Платформа поддерживает три способа входа для пользователей чата:

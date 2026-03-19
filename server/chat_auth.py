@@ -76,7 +76,7 @@ def _resolve_sso_user(email, provider, provider_id, first_name, last_name):
         return user
 
     # Step 3: Auto-create
-    base_username = email.split("@")[0].lower().replace(".", "_")
+    base_username = email.split("@")[0].lower()
     username = base_username
     counter = 1
     while ChatUser.query.filter_by(username=username).first():

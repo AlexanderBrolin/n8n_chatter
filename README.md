@@ -31,13 +31,18 @@
 | Метод | Описание |
 |-------|----------|
 | `getMe` | Информация о боте |
-| `sendMessage` | Отправка текста (`chat_id`, `text`, `parse_mode`) |
+| `getUpdates` | Long-polling для получения обновлений (`offset`, `limit`, `timeout`) |
+| `sendMessage` | Отправка текста (`chat_id`, `text`, `parse_mode`, `reply_markup`) |
+| `editMessageText` | Редактирование сообщения бота |
+| `deleteMessage` | Удаление сообщения (soft delete) |
 | `sendDocument` | Отправка файла (`chat_id`, `document`, `caption`) |
 | `sendPhoto` | Отправка изображения (`chat_id`, `photo`, `caption`) |
-| `getFile` | Ссылка на скачивание файла (`file_id`) |
+| `getFile` | Метаданные файла (`file_id`) |
+| `sendChatAction` | Индикатор «бот печатает...» |
+| `answerCallbackQuery` | Подтверждение нажатия inline-кнопки |
 | `setWebhook` | Регистрация webhook URL |
-| `deleteWebhook` | Удаление webhook |
-| `getWebhookInfo` | Текущий webhook |
+| `deleteWebhook` | Удаление webhook (`drop_pending_updates`) |
+| `getWebhookInfo` | Текущий webhook и количество ожидающих обновлений |
 
 Webhook-payload к n8n идентичен формату Telegram `Update`:
 ```json
@@ -124,7 +129,314 @@ docker compose exec n8n-front flask --app server.app:create_app seed
 
 В существующем воркфлоу замените `https://api.telegram.org/bot{token}` на `http://n8n-front-host:5001/api/bot/{token}` — выражения вида `{{ $json.message.text }}` продолжат работать без изменений.
 
-### 6. Продакшн (nginx)
+### 6. Миграция Python-ботов с Telegram
+
+Chatter реализует Telegram-совместимый Bot API — существующие Python-боты переносятся с минимальными изменениями в коде.
+
+#### Поддерживаемые библиотеки
+
+| Библиотека | Версия | Поддержка |
+|------------|--------|-----------|
+| `python-telegram-bot` | 20.x+ | Полная (polling + webhook) |
+| `aiogram` | 3.x | Полная (polling + webhook) |
+| `requests` / `httpx` (raw API) | любая | Полная |
+
+#### Принцип работы
+
+Bot API платформы Chatter повторяет API Telegram: те же эндпоинты, тот же формат JSON. Поэтому вместо переписывания бота достаточно сменить базовый URL — с `https://api.telegram.org/bot` на `https://your-chatter.com/api/bot`.
+
+Поддерживается как **webhook-режим** (бот слушает входящие запросы от Chatter), так и **polling-режим** (бот сам запрашивает обновления через `getUpdates` с long polling).
+
+---
+
+#### Пошаговая инструкция
+
+##### Шаг 1. Создать бота в админке Chatter
+
+1. Откройте админку: `http://your-host:5001/admin/`
+2. Перейдите: Боты → Новый бот
+3. Заполните имя и username
+4. **Webhook URL оставьте пустым** — для polling-режима webhook не нужен
+5. Нажмите «Создать» — скопируйте сгенерированный **API-токен**
+6. Назначьте бота нужным пользователям (или включите флаг «Доступен всем»)
+
+##### Шаг 2. Установить зависимости
+
+Для `python-telegram-bot`:
+```bash
+pip install python-telegram-bot>=20.0
+```
+
+Для `aiogram`:
+```bash
+pip install aiogram>=3.0
+```
+
+##### Шаг 3. Изменить код бота
+
+**Вариант A — с хелпером `chatter_bot.py` (рекомендуется)**
+
+Скопируйте файл `chatter_bot.py` из репозитория Chatter в проект бота. Затем:
+
+```python
+# ===== БЫЛО (Telegram) =====
+from telegram.ext import Application, CommandHandler, MessageHandler, filters
+
+TOKEN = "123456:ABC-DEF..."
+application = Application.builder().token(TOKEN).build()
+
+# ===== СТАЛО (Chatter) =====
+from telegram.ext import CommandHandler, MessageHandler, filters
+from chatter_bot import chatter_application
+
+TOKEN = "ваш-токен-из-админки-chatter"
+CHATTER_URL = "https://chat.company.com"  # URL вашего Chatter
+application = chatter_application(TOKEN, CHATTER_URL)
+```
+
+Всё остальное — хендлеры, фильтры, `run_polling()` — остаётся **без изменений**.
+
+**Вариант B — без хелпера (ручная настройка)**
+
+```python
+from telegram.ext import Application
+
+TOKEN = "ваш-токен-из-админки-chatter"
+CHATTER_URL = "https://chat.company.com"
+
+application = (
+    Application.builder()
+    .token(TOKEN)
+    .base_url(f"{CHATTER_URL}/api/bot")
+    .base_file_url(f"{CHATTER_URL}/api/bot")
+    .build()
+)
+```
+
+**Вариант C — aiogram 3.x**
+
+```python
+from aiogram import Bot, Dispatcher
+
+TOKEN = "ваш-токен-из-админки-chatter"
+CHATTER_URL = "https://chat.company.com/api/bot"
+
+bot = Bot(token=TOKEN, base_url=CHATTER_URL)
+dp = Dispatcher()
+
+# Хендлеры — без изменений
+# dp.message(...)
+
+# Polling — без изменений
+dp.run_polling(bot)
+```
+
+**Вариант D — raw requests / httpx**
+
+Замените базовый URL в HTTP-вызовах:
+
+```python
+import requests
+
+TOKEN = "ваш-токен"
+# Было:    BASE = f"https://api.telegram.org/bot{TOKEN}"
+# Стало:
+BASE = f"https://chat.company.com/api/bot/{TOKEN}"
+
+# Отправка сообщения — без изменений:
+requests.post(f"{BASE}/sendMessage", json={
+    "chat_id": chat_id,
+    "text": "Привет!",
+})
+```
+
+> **Обратите внимание:** в URL Telegram токен идёт сразу после `bot` без `/`: `bot{TOKEN}/sendMessage`. В Chatter токен — отдельный сегмент пути: `bot/{TOKEN}/sendMessage`. Если вы используете raw HTTP-запросы, проверьте формат URL.
+
+##### Шаг 4. Запустить бота
+
+```bash
+python bot.py
+```
+
+Бот подключится к Chatter, вызовет `getMe` (проверка токена) → `deleteWebhook` → запустит polling через `getUpdates`. Отправьте сообщение боту в чате Chatter — он ответит.
+
+---
+
+#### Примеры: типовые операции
+
+**Текстовые сообщения и команды:**
+```python
+from telegram import Update
+from telegram.ext import CommandHandler, MessageHandler, filters, CallbackContext
+
+async def start(update: Update, context: CallbackContext):
+    await update.message.reply_text("Привет! Я работаю в Chatter.")
+
+async def echo(update: Update, context: CallbackContext):
+    await update.message.reply_text(f"Вы написали: {update.message.text}")
+
+application.add_handler(CommandHandler("start", start))
+application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, echo))
+application.run_polling()
+```
+
+**Inline-кнопки (callback_query):**
+```python
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import CallbackQueryHandler, CallbackContext
+
+async def ask(update: Update, context: CallbackContext):
+    keyboard = [[
+        InlineKeyboardButton("Да", callback_data="yes"),
+        InlineKeyboardButton("Нет", callback_data="no"),
+    ]]
+    await update.message.reply_text(
+        "Вам нравится Chatter?",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+    )
+
+async def button(update: Update, context: CallbackContext):
+    query = update.callback_query
+    await query.answer()  # подтверждение нажатия
+    await query.edit_message_text(f"Вы выбрали: {query.data}")
+
+application.add_handler(CommandHandler("ask", ask))
+application.add_handler(CallbackQueryHandler(button))
+```
+
+**Отправка и получение фото:**
+```python
+async def handle_photo(update: Update, context: CallbackContext):
+    # Получить файл
+    photo = update.message.photo[-1]  # наибольший размер
+    file = await context.bot.get_file(photo.file_id)
+    await file.download_to_drive("photo.jpg")
+
+    # Отправить фото обратно
+    with open("photo.jpg", "rb") as f:
+        await context.bot.send_photo(
+            chat_id=update.message.chat.id,
+            photo=f,
+            caption="Получил ваше фото!",
+        )
+
+application.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+```
+
+**Отправка документов:**
+```python
+async def send_report(update: Update, context: CallbackContext):
+    with open("report.pdf", "rb") as f:
+        await context.bot.send_document(
+            chat_id=update.message.chat.id,
+            document=f,
+            caption="Отчёт за месяц",
+        )
+```
+
+**Markdown-форматирование:**
+```python
+async def formatted(update: Update, context: CallbackContext):
+    await update.message.reply_text(
+        "*Жирный*, _курсив_, `код`, [ссылка](https://example.com)",
+        parse_mode="Markdown",
+    )
+```
+
+---
+
+#### Различия Chatter и Telegram Bot API
+
+| Возможность | Telegram | Chatter | Комментарий |
+|------------|---------|---------|-------------|
+| `getUpdates` (polling) | Да | Да | Long polling до 30 сек |
+| `setWebhook` / `deleteWebhook` | Да | Да | Полная совместимость |
+| `sendMessage` + inline keyboard | Да | Да | |
+| `editMessageText` | Да | Да | |
+| `deleteMessage` | Да | Да | Soft delete |
+| `sendPhoto` / `sendDocument` | Да | Да | Макс. 50 MB |
+| `getFile` + скачивание | Да | Да | |
+| `sendChatAction` (typing) | Да | Да | |
+| `answerCallbackQuery` | Да | Да | |
+| `getMe` | Да | Да | |
+| Групповые чаты | Да | Да | Создаются через админку |
+| `reply_to_message_id` | Да | Нет | Не поддерживается |
+| `forwardMessage` | Да | Нет | Не поддерживается |
+| `sendVenue` / `sendLocation` | Да | Нет | Не поддерживается |
+| `sendSticker` | Да | Нет | Не поддерживается |
+| `ReplyKeyboardMarkup` | Да | Нет | Только `InlineKeyboardMarkup` |
+| `chat_id` по username (`@user`) | Да | Нет | Только числовой `chat_id` (= ID беседы) |
+| Bot username в командах (`/start@bot`) | Да | Нет | Просто `/start` |
+| `photo.width` / `photo.height` | Да | Всегда 0 | Размеры не вычисляются |
+
+---
+
+#### Переменные окружения (рекомендуемый подход)
+
+Для удобства переключения между Telegram и Chatter используйте переменные окружения:
+
+```python
+import os
+from telegram.ext import Application
+
+TOKEN = os.environ["BOT_TOKEN"]
+PLATFORM = os.environ.get("BOT_PLATFORM", "telegram")  # "telegram" или "chatter"
+CHATTER_URL = os.environ.get("CHATTER_URL", "")
+
+builder = Application.builder().token(TOKEN)
+if PLATFORM == "chatter":
+    api_url = CHATTER_URL.rstrip("/") + "/api/bot"
+    builder = builder.base_url(api_url).base_file_url(api_url)
+application = builder.build()
+```
+
+```bash
+# Для Telegram:
+BOT_TOKEN=123456:ABC-DEF python bot.py
+
+# Для Chatter:
+BOT_PLATFORM=chatter CHATTER_URL=https://chat.company.com BOT_TOKEN=ваш-токен python bot.py
+```
+
+---
+
+#### FAQ / Troubleshooting
+
+**Q: Бот запускается, но не получает сообщения.**
+A: Проверьте:
+1. Webhook URL в админке Chatter пуст (для polling-режима webhook не нужен)
+2. Бот назначен пользователю (Админка → Пользователи → назначить бота)
+3. Redis работает (polling хранит очередь обновлений в Redis)
+4. Токен совпадает с тем, что в админке
+
+**Q: Ошибка `409 Conflict: can't use getUpdates method while webhook is active`.**
+A: У бота установлен webhook URL в админке. Очистите его (Админка → Боты → Редактировать → убрать Webhook URL) или вызовите `deleteWebhook` программно.
+
+**Q: Бот отвечает в Telegram, но не в Chatter.**
+A: Убедитесь, что `base_url` указывает на Chatter, а не на `api.telegram.org`. Проверьте, что `base_file_url` тоже указывает на Chatter (нужно для скачивания файлов).
+
+**Q: Файлы / фото не скачиваются.**
+A: Убедитесь, что `base_file_url` установлен в `{CHATTER_URL}/api/bot`. Без этого библиотека будет пытаться скачать файлы с `api.telegram.org`.
+
+**Q: `photo.width` и `photo.height` равны 0.**
+A: Это ожидаемое поведение — Chatter не вычисляет размеры изображений. Если вашему боту нужны размеры, вычислите их после скачивания (например, через `Pillow`).
+
+**Q: `ReplyKeyboardMarkup` не работает.**
+A: Chatter поддерживает только `InlineKeyboardMarkup` (кнопки под сообщением). `ReplyKeyboardMarkup` (кнопки вместо клавиатуры) не реализован. Используйте inline-кнопки или Quick Replies (настраиваются в админке бота).
+
+**Q: Как запустить один и тот же бот одновременно в Telegram и Chatter?**
+A: Запустите два экземпляра процесса с разными переменными окружения:
+```bash
+# Терминал 1 — Telegram
+BOT_TOKEN=telegram-token python bot.py
+
+# Терминал 2 — Chatter
+BOT_PLATFORM=chatter CHATTER_URL=https://chat.company.com BOT_TOKEN=chatter-token python bot.py
+```
+
+---
+
+### 7. Продакшн (nginx)
 
 Используйте прилагаемый `nginx.conf` как основу. Ключевое — отключение буферизации для SSE:
 ```nginx
@@ -153,10 +465,12 @@ pip install pywebpush
 ```bash
 python -c "
 from py_vapid import Vapid
+from py_vapid.utils import b64urlencode
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 v = Vapid()
 v.generate_keys()
 print('VAPID_PRIVATE_KEY=' + v.private_pem().decode().replace('\n', '\\\\n'))
-print('VAPID_PUBLIC_KEY=' + v.public_key)
+print('VAPID_PUBLIC_KEY=' + b64urlencode(v.public_key.public_bytes(Encoding.X962, PublicFormat.UncompressedPoint)))
 "
 ```
 
@@ -349,14 +663,15 @@ N8n_Front/
 │   ├── chat_auth.py         # Авторизация пользователей чата (пароль + Google + Keycloak)
 │   ├── oauth.py             # Authlib OAuth провайдеры (Google, Keycloak)
 │   ├── views.py             # Админка (dashboard, CRUD ботов/юзеров, аудит)
-│   ├── bot_api.py           # Telegram-совместимый Bot API
+│   ├── bot_api.py           # Telegram-совместимый Bot API (включая getUpdates)
 │   ├── chat_api.py          # API для фронтенда чата
 │   ├── chat_views.py        # Страница чата
-│   ├── webhook.py           # Исходящие вебхуки к n8n
+│   ├── webhook.py           # Исходящие вебхуки / Redis-очередь для polling
 │   ├── sse.py               # SSE брокер (Redis pub/sub)
 │   ├── file_handler.py      # Загрузка/скачивание файлов
 │   ├── seed.py              # CLI-команда создания первого админа
 │   └── templates/           # Jinja2 шаблоны (админка + чат)
+├── chatter_bot.py          # Python-хелпер для миграции ботов с Telegram
 ├── Dockerfile
 ├── docker-compose.yml
 ├── nginx.conf

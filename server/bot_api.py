@@ -1,5 +1,6 @@
 import json
 import os
+import time as time_mod
 import uuid
 from datetime import datetime, timezone
 from functools import wraps
@@ -180,6 +181,12 @@ def set_webhook(token):
     bot.webhook_url = url
     db.session.commit()
 
+    # Clear polling queue when switching to webhook mode
+    if url:
+        redis_client = sse_broker._redis
+        if redis_client:
+            redis_client.delete(f"bot:updates:{bot.id}")
+
     return jsonify({"ok": True, "result": True, "description": "Webhook was set"})
 
 
@@ -187,8 +194,15 @@ def set_webhook(token):
 @bot_from_token
 def delete_webhook(token):
     bot = request.bot
+    data = request.get_json(silent=True) or request.form or {}
     bot.webhook_url = ""
     db.session.commit()
+
+    # Telegram-compatible: optionally drop pending updates from polling queue
+    if str(data.get("drop_pending_updates", "")).lower() in ("true", "1", "yes"):
+        redis_client = sse_broker._redis
+        if redis_client:
+            redis_client.delete(f"bot:updates:{bot.id}")
 
     return jsonify({"ok": True, "result": True, "description": "Webhook was deleted"})
 
@@ -197,16 +211,95 @@ def delete_webhook(token):
 @bot_from_token
 def get_webhook_info(token):
     bot = request.bot
+    pending = 0
+    redis_client = sse_broker._redis
+    if redis_client:
+        pending = redis_client.llen(f"bot:updates:{bot.id}")
     return jsonify(
         {
             "ok": True,
             "result": {
                 "url": bot.webhook_url or "",
                 "has_custom_certificate": False,
-                "pending_update_count": 0,
+                "pending_update_count": pending,
             },
         }
     )
+
+
+@bot_api_bp.route("/<token>/getUpdates", methods=["GET", "POST"])
+@bot_from_token
+def get_updates(token):
+    """Telegram-compatible getUpdates — long-polling for updates from Redis queue."""
+    bot = request.bot
+
+    if bot.webhook_url:
+        return jsonify({
+            "ok": False,
+            "error_code": 409,
+            "description": "Conflict: can't use getUpdates method while webhook is active",
+        }), 409
+
+    data = request.get_json(silent=True) or request.args
+
+    offset = int(data.get("offset", 0))
+    limit = min(int(data.get("limit", 100)), 100)
+    timeout = min(int(data.get("timeout", 0)), 30)  # cap at 30s
+
+    redis_client = sse_broker._redis
+    if not redis_client:
+        return jsonify({"ok": True, "result": []})
+
+    key = f"bot:updates:{bot.id}"
+
+    # Confirm (remove) updates with update_id < offset
+    if offset > 0:
+        all_raw = redis_client.lrange(key, 0, -1)
+        remaining = []
+        for raw in all_raw:
+            try:
+                update = json.loads(raw)
+                if update.get("update_id", 0) >= offset:
+                    remaining.append(raw)
+            except (json.JSONDecodeError, TypeError):
+                pass
+        redis_client.delete(key)
+        if remaining:
+            redis_client.rpush(key, *remaining)
+
+    def _fetch():
+        raw_list = redis_client.lrange(key, 0, limit - 1)
+        results = []
+        for raw in raw_list:
+            try:
+                results.append(json.loads(raw))
+            except (json.JSONDecodeError, TypeError):
+                pass
+        return results
+
+    updates = _fetch()
+
+    # Long polling: wait for new updates up to timeout
+    if not updates and timeout > 0:
+        deadline = time_mod.time() + timeout
+        pubsub = redis_client.pubsub()
+        notify_channel = f"bot:updates:notify:{bot.id}"
+        pubsub.subscribe(notify_channel)
+        try:
+            while time_mod.time() < deadline:
+                remaining_time = deadline - time_mod.time()
+                if remaining_time <= 0:
+                    break
+                msg = pubsub.get_message(timeout=min(1.0, remaining_time))
+                if msg and msg["type"] == "message":
+                    updates = _fetch()
+                    if updates:
+                        break
+        finally:
+            pubsub.unsubscribe(notify_channel)
+            pubsub.close()
+
+    return jsonify({"ok": True, "result": updates[:limit]})
 
 
 @bot_api_bp.route("/<token>/getMe", methods=["GET"])

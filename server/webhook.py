@@ -1,3 +1,4 @@
+import json
 import logging
 import threading
 import time
@@ -8,6 +9,9 @@ import requests
 from server.models import Bot, ChatUser, Conversation, Message
 
 logger = logging.getLogger(__name__)
+
+# Max pending updates per bot in Redis queue (for getUpdates polling)
+MAX_PENDING_UPDATES = 100
 
 WEBHOOK_MAX_RETRIES = 3
 WEBHOOK_BACKOFF_BASE = 2  # seconds
@@ -117,13 +121,30 @@ def _do_webhook_post(webhook_url, payload, bot_username, ref_id):
     )
 
 
-def send_webhook(bot, conversation, message, user):
-    """POST Telegram-format Update to the bot's webhook_url (fire-and-forget with retry)."""
-    if not bot.webhook_url:
-        logger.warning("Bot %s (id=%d) has no webhook_url configured", bot.username, bot.id)
+def _queue_update_for_polling(bot, payload):
+    """Push update to Redis queue for getUpdates polling."""
+    from server.sse import sse_broker
+
+    redis_client = sse_broker._redis
+    if not redis_client:
+        logger.warning("Redis not available, cannot queue update for bot %s", bot.username)
         return
 
+    key = f"bot:updates:{bot.id}"
+    redis_client.rpush(key, json.dumps(payload, ensure_ascii=False))
+    # Cap the queue size
+    redis_client.ltrim(key, -MAX_PENDING_UPDATES, -1)
+    # Notify long-polling clients
+    redis_client.publish(f"bot:updates:notify:{bot.id}", "1")
+
+
+def send_webhook(bot, conversation, message, user):
+    """POST Telegram-format Update to the bot's webhook_url, or queue for polling."""
     payload = build_update_payload(message, conversation, user, bot)
+
+    if not bot.webhook_url:
+        _queue_update_for_polling(bot, payload)
+        return
 
     thread = threading.Thread(
         target=_do_webhook_post,
@@ -134,11 +155,7 @@ def send_webhook(bot, conversation, message, user):
 
 
 def send_callback_webhook(bot, conversation, message, user, callback_data):
-    """POST Telegram-compatible callback_query to the bot's webhook_url."""
-    if not bot.webhook_url:
-        logger.warning("Bot %s (id=%d) has no webhook_url configured", bot.username, bot.id)
-        return
-
+    """POST Telegram-compatible callback_query to the bot's webhook_url, or queue for polling."""
     chat_data = {
         "id": conversation.id,
         "type": conversation.chat_type or "private",
@@ -167,6 +184,10 @@ def send_callback_webhook(bot, conversation, message, user, callback_data):
             "data": callback_data,
         },
     }
+
+    if not bot.webhook_url:
+        _queue_update_for_polling(bot, payload)
+        return
 
     thread = threading.Thread(
         target=_do_webhook_post,

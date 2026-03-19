@@ -298,12 +298,15 @@ def user_action(user_id):
         audit_log(actor, "toggle_block_user", user.username, status)
         flash(f"Пользователь {status}.", "success")
     elif action == "delete":
-        from server.models import PushSubscription, Message
+        from server.models import PushSubscription, Message, FileAttachment
         username = user.username
         # Удалить push-подписки
         PushSubscription.query.filter_by(user_id=user.id).delete()
-        # Удалить сообщения и диалоги пользователя
+        # Удалить вложения, сообщения и диалоги пользователя
         for conv in list(user.conversations):
+            msg_ids = [m.id for m in Message.query.filter_by(conversation_id=conv.id).all()]
+            if msg_ids:
+                FileAttachment.query.filter(FileAttachment.message_id.in_(msg_ids)).delete()
             Message.query.filter_by(conversation_id=conv.id).delete()
             db.session.delete(conv)
         # Очистить членство в групповых чатах и доступ к ботам

@@ -7,7 +7,7 @@ volumes:
 services:
   postgres:
     image: postgres:16
-    env_file: envfile
+    env_file: .env
     restart: always
     environment:
       - POSTGRES_USER=${DB_USER:-n8n_front}
@@ -33,7 +33,7 @@ services:
   n8n-front:
     build: .
     restart: unless-stopped
-    env_file: envfile
+    env_file: .env
     ports:
       - "${APP_PORT:-5001}:5000"
     volumes:

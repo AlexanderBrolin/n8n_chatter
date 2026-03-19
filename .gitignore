@@ -38,7 +38,7 @@ migrations/
 Thumbs.db
 
 # n8n-nodes-n8nfront
-n8n-nodes-n8nfront/node_modules/
 n8n-nodes-n8nfront/.npmrc
+n8n-nodes-n8nfront
+.env
 \[Brolin]\[Prod] PostCard (new year).json
-\[Lev] Сервис-бот.json

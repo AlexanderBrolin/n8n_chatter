@@ -60,11 +60,15 @@ def bot_new():
         from server.auth import get_current_admin
 
         admin = get_current_admin()
+        avatar_url = request.form.get("avatar_url", "").strip()
+        is_public = bool(request.form.get("is_public"))
         bot = Bot(
             name=name,
             username=username,
             description=description,
             webhook_url=webhook_url,
+            avatar_url=avatar_url,
+            is_public=is_public,
             api_token=uuid.uuid4().hex + uuid.uuid4().hex,
             created_by=admin.username if admin else "",
         )
@@ -95,6 +99,7 @@ def bot_edit(bot_id):
         bot.description = request.form.get("description", "").strip()
         bot.webhook_url = request.form.get("webhook_url", bot.webhook_url).strip()
         bot.avatar_url = request.form.get("avatar_url", "").strip()
+        bot.is_public = bool(request.form.get("is_public"))
         db.session.commit()
 
         from server.auth import get_current_admin
@@ -167,21 +172,31 @@ def user_new():
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "").strip()
+        email = request.form.get("email", "").strip().lower() or None
         first_name = request.form.get("first_name", "").strip()
         last_name = request.form.get("last_name", "").strip()
         bot_ids = request.form.getlist("bot_ids", type=int)
 
-        if not username or not password:
-            flash("Логин и пароль обязательны.", "error")
+        if not username:
+            flash("Логин обязателен.", "error")
+            return render_template("admin/user_edit.html", user=None, all_bots=all_bots)
+
+        if not password and not email:
+            flash("Укажите пароль или email для SSO.", "error")
             return render_template("admin/user_edit.html", user=None, all_bots=all_bots)
 
         if ChatUser.query.filter_by(username=username).first():
             flash(f"Пользователь '{username}' уже существует.", "error")
             return render_template("admin/user_edit.html", user=None, all_bots=all_bots)
 
+        if email and ChatUser.query.filter_by(email=email).first():
+            flash(f"Email '{email}' уже используется.", "error")
+            return render_template("admin/user_edit.html", user=None, all_bots=all_bots)
+
         user = ChatUser(
             username=username,
-            password_hash=generate_password_hash(password),
+            password_hash=generate_password_hash(password) if password else None,
+            email=email,
             first_name=first_name,
             last_name=last_name,
         )
@@ -217,6 +232,12 @@ def user_edit(user_id):
     if request.method == "POST":
         user.first_name = request.form.get("first_name", "").strip()
         user.last_name = request.form.get("last_name", "").strip()
+        new_email = request.form.get("email", "").strip().lower() or None
+        if new_email != user.email:
+            if new_email and ChatUser.query.filter(ChatUser.email == new_email, ChatUser.id != user.id).first():
+                flash(f"Email '{new_email}' уже используется.", "error")
+                return render_template("admin/user_edit.html", user=user, all_bots=all_bots)
+            user.email = new_email
         new_password = request.form.get("password", "").strip()
         if new_password:
             user.password_hash = generate_password_hash(new_password)

@@ -17,6 +17,7 @@
         <thead>
             <tr class="border-b border-gray-200 bg-gray-50">
                 <th class="text-left px-5 py-3 font-medium text-gray-500">Логин</th>
+                <th class="text-left px-5 py-3 font-medium text-gray-500">Email</th>
                 <th class="text-left px-5 py-3 font-medium text-gray-500">Имя</th>
                 <th class="text-left px-5 py-3 font-medium text-gray-500">Боты</th>
                 <th class="text-left px-5 py-3 font-medium text-gray-500">Статус</th>
@@ -27,6 +28,7 @@
             {% for user in users.items %}
             <tr class="hover:bg-gray-50 cursor-pointer" onclick="window.location='{{ url_for('views.user_edit', user_id=user.id) }}'">
                 <td class="px-5 py-3 font-medium text-gray-900">{{ user.username }}</td>
+                <td class="px-5 py-3 text-gray-500">{{ user.email or '—' }}</td>
                 <td class="px-5 py-3 text-gray-600">{{ user.first_name }} {{ user.last_name }}</td>
                 <td class="px-5 py-3 text-gray-500">{{ user.bots|length }}</td>
                 <td class="px-5 py-3">
@@ -40,7 +42,7 @@
             </tr>
             {% else %}
             <tr>
-                <td colspan="5" class="px-5 py-8 text-center text-gray-400">Нет пользователей</td>
+                <td colspan="6" class="px-5 py-8 text-center text-gray-400">Нет пользователей</td>
             </tr>
             {% endfor %}
         </tbody>

@@ -17,6 +17,9 @@ def create_app(config_class="server.config.Config"):
     db.init_app(app)
     migrate.init_app(app, db)
 
+    from server.oauth import init_oauth
+    init_oauth(app)
+
     from server.auth import auth_bp
     from server.views import views_bp
     from server.chat_auth import chat_auth_bp

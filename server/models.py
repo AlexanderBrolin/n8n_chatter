@@ -40,7 +40,11 @@ class ChatUser(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(64), unique=True, nullable=False)
-    password_hash = db.Column(db.String(256), nullable=False)
+    password_hash = db.Column(db.String(256), nullable=True)
+    email = db.Column(db.String(256), unique=True, nullable=True)
+    auth_provider = db.Column(db.String(20), default="local")
+    google_id = db.Column(db.String(256), unique=True, nullable=True)
+    keycloak_id = db.Column(db.String(256), unique=True, nullable=True)
     first_name = db.Column(db.String(128), default="")
     last_name = db.Column(db.String(128), default="")
     is_blocked = db.Column(db.Boolean, default=False)
@@ -65,6 +69,7 @@ class Bot(db.Model):
     webhook_url = db.Column(db.String(512), nullable=False, default="")
     api_token = db.Column(db.String(256), unique=True, nullable=False)
     avatar_url = db.Column(db.String(512), default="")
+    is_public = db.Column(db.Boolean, default=False)
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(
         db.DateTime, default=lambda: datetime.now(timezone.utc)

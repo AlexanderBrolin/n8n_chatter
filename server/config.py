@@ -13,3 +13,18 @@ class Config:
     UPLOAD_FOLDER = os.environ.get(
         "UPLOAD_FOLDER", os.path.join(os.path.dirname(__file__), "static", "uploads")
     )
+
+    # Google OAuth2
+    GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
+    GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
+    GOOGLE_ALLOWED_DOMAINS = [
+        d.strip()
+        for d in os.environ.get("GOOGLE_ALLOWED_DOMAINS", "").split(",")
+        if d.strip()
+    ]
+
+    # Keycloak OIDC
+    KEYCLOAK_URL = os.environ.get("KEYCLOAK_URL", "")
+    KEYCLOAK_REALM = os.environ.get("KEYCLOAK_REALM", "master")
+    KEYCLOAK_CLIENT_ID = os.environ.get("KEYCLOAK_CLIENT_ID", "")
+    KEYCLOAK_CLIENT_SECRET = os.environ.get("KEYCLOAK_CLIENT_SECRET", "")

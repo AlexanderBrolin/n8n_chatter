@@ -43,6 +43,13 @@ services:
       - DATABASE_URL=postgresql://${DB_USER:-n8n_front}:${DB_PASSWORD:-n8n_front}@postgres:5432/${DB_NAME:-n8n_front}
       - REDIS_URL=redis://redis:6379/0
       - UPLOAD_FOLDER=/app/server/static/uploads
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+      - GOOGLE_ALLOWED_DOMAINS=${GOOGLE_ALLOWED_DOMAINS:-}
+      - KEYCLOAK_URL=${KEYCLOAK_URL:-}
+      - KEYCLOAK_REALM=${KEYCLOAK_REALM:-master}
+      - KEYCLOAK_CLIENT_ID=${KEYCLOAK_CLIENT_ID:-}
+      - KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET:-}
     depends_on:
       postgres:
         condition: service_healthy

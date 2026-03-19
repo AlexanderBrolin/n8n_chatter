@@ -73,9 +73,9 @@
 ## Осталось сделать
 
 ### Авторизация
-- [ ] Google OAuth для пользователей чата
-- [ ] Keycloak SSO интеграция
-- [ ] Смена пароля пользователем чата (self-service)
+- [x] Google OAuth для пользователей чата
+- [x] Keycloak SSO интеграция
+- [x] Смена пароля пользователем чата (self-service)
 
 ### n8n Community Nodes
 - [x] Операция downloadFile (скачать файл как binary для обработки в n8n)

@@ -136,27 +136,183 @@ location ~ /chat/api/conversations/.*/stream {
 }
 ```
 
+## Настройка SSO-авторизации
+
+Платформа поддерживает три способа входа для пользователей чата:
+- **Логин/пароль** — работает по умолчанию, без дополнительной настройки
+- **Google OAuth2** — вход через Google Workspace (корпоративные и обычные аккаунты)
+- **Keycloak OIDC** — вход через корпоративную систему (ERP, Active Directory и т.д.)
+
+SSO-кнопки появляются на странице входа только при заполненных переменных окружения. Без них страница выглядит как обычная форма логин/пароль.
+
+При первом входе через SSO пользователь создаётся автоматически: username берётся из email (часть до `@`), ему назначаются боты с флагом «Доступен всем». Администратор может позже назначить дополнительных ботов и задать пароль для fallback-входа.
+
+### Google OAuth2
+
+#### 1. Создание проекта в Google Cloud Console
+
+1. Откройте [Google Cloud Console](https://console.cloud.google.com/)
+2. Создайте новый проект или выберите существующий
+3. Перейдите в **APIs & Services → OAuth consent screen**
+4. Выберите тип **Internal** (для Google Workspace) или **External** (для всех Google-аккаунтов)
+5. Заполните:
+   - **App name**: название вашего приложения (например, «Chatter»)
+   - **User support email**: ваш email
+   - **Developer contact email**: ваш email
+6. На шаге **Scopes** добавьте:
+   - `openid`
+   - `email`
+   - `profile`
+7. Сохраните
+
+#### 2. Создание OAuth2 Client ID
+
+1. Перейдите в **APIs & Services → Credentials**
+2. Нажмите **Create Credentials → OAuth client ID**
+3. Тип: **Web application**
+4. Название: например, «Chatter»
+5. В **Authorized redirect URIs** добавьте:
+   ```
+   https://your-domain.com/chat/auth/google/callback
+   ```
+   Для локальной разработки:
+   ```
+   http://localhost:5001/chat/auth/google/callback
+   ```
+6. Нажмите **Create**
+7. Скопируйте **Client ID** и **Client Secret**
+
+#### 3. Настройка .env
+
+```env
+GOOGLE_CLIENT_ID=123456789-abcdef.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=GOCSPX-ваш-секрет
+GOOGLE_ALLOWED_DOMAINS=company.com,subsidiary.com
+```
+
+- `GOOGLE_CLIENT_ID` — Client ID из Google Cloud Console
+- `GOOGLE_CLIENT_SECRET` — Client Secret из Google Cloud Console
+- `GOOGLE_ALLOWED_DOMAINS` — список разрешённых email-доменов через запятую. Если пусто — допускаются любые Google-аккаунты. Если указано `company.com` — войти смогут только пользователи с email `@company.com`
+
+#### 4. Перезапуск
+
+```bash
+docker compose --env-file .env up -d --build
+```
+
+На странице входа в чат появится кнопка **Google**.
+
+---
+
+### Keycloak OIDC (ERP)
+
+#### 1. Создание клиента в Keycloak
+
+1. Откройте админку Keycloak: `https://keycloak.your-domain.com/admin/`
+2. Выберите нужный **Realm** (или создайте новый)
+3. Перейдите в **Clients → Create client**
+4. Заполните:
+   - **Client type**: OpenID Connect
+   - **Client ID**: например, `chatter` (это значение пойдёт в `KEYCLOAK_CLIENT_ID`)
+5. Нажмите **Next**
+6. Включите **Client authentication** (ON)
+7. Убедитесь, что включён **Standard flow** (Authorization Code Flow)
+8. Нажмите **Next**
+9. В **Valid redirect URIs** добавьте:
+   ```
+   https://your-domain.com/chat/auth/keycloak/callback
+   ```
+   Для локальной разработки:
+   ```
+   http://localhost:5001/chat/auth/keycloak/callback
+   ```
+10. В **Web origins** добавьте:
+    ```
+    https://your-domain.com
+    ```
+11. Нажмите **Save**
+
+#### 2. Получение Client Secret
+
+1. Откройте созданный клиент
+2. Перейдите на вкладку **Credentials**
+3. Скопируйте **Client Secret**
+
+#### 3. Настройка маппинга email (если не настроен)
+
+По умолчанию Keycloak отдаёт email в токене. Убедитесь:
+
+1. Перейдите в **Client Scopes → email → Mappers**
+2. Убедитесь, что маппер **email** существует и включён
+3. Если пользователи Keycloak подключены через LDAP/Active Directory — проверьте, что атрибут email синхронизируется
+
+#### 4. Настройка .env
+
+```env
+KEYCLOAK_URL=https://keycloak.your-domain.com
+KEYCLOAK_REALM=your-realm
+KEYCLOAK_CLIENT_ID=chatter
+KEYCLOAK_CLIENT_SECRET=ваш-client-secret-из-keycloak
+```
+
+- `KEYCLOAK_URL` — базовый URL Keycloak **без** trailing slash и без `/auth`. Примеры:
+  - `https://keycloak.company.com` (Keycloak 17+)
+  - `https://sso.company.com/auth` (Keycloak < 17, с `/auth` в пути)
+- `KEYCLOAK_REALM` — название realm в Keycloak (по умолчанию `master`)
+- `KEYCLOAK_CLIENT_ID` — Client ID, указанный при создании клиента
+- `KEYCLOAK_CLIENT_SECRET` — секрет со вкладки Credentials
+
+#### 5. Перезапуск
+
+```bash
+docker compose --env-file .env up -d --build
+```
+
+На странице входа в чат появится кнопка **ERP**.
+
+---
+
+### Как работает SSO
+
+| Сценарий | Что происходит |
+|----------|---------------|
+| Первый вход через SSO | Создаётся новый пользователь, username = часть email до `@`, назначаются публичные боты |
+| Повторный вход через SSO | Находится по provider ID, сессия восстанавливается |
+| У пользователя уже есть аккаунт с тем же email | Аккаунты связываются, SSO-логин привязывается к существующему пользователю |
+| Админ заранее создал пользователя с email | При SSO-входе аккаунт привяжется автоматически |
+| SSO недоступен | Пользователь входит по логину/паролю (если админ задал пароль) |
+| Пользователь вошёл через SSO, пароль не задан | При попытке входа по паролю — сообщение «Используйте SSO или обратитесь к администратору» |
+
+### Управление доступом ботов для SSO-пользователей
+
+В настройках каждого бота (Админка → Боты → Редактирование) есть чекбокс **«Доступен всем»**. Боты с этим флагом автоматически назначаются новым пользователям, созданным через SSO.
+
+Для назначения остальных ботов — откройте профиль пользователя в админке и отметьте нужных ботов.
+
+---
+
 ## Структура проекта
 
 ```
 N8n_Front/
 ├── server/
 │   ├── app.py              # Flask app factory
-│   ├── config.py            # Конфигурация
-│   ├── models.py            # SQLAlchemy модели (7 моделей)
+│   ├── config.py            # Конфигурация (включая OAuth)
+│   ├── models.py            # SQLAlchemy модели
 │   ├── auth.py              # Авторизация админов
-│   ├── chat_auth.py         # Авторизация пользователей чата
+│   ├── chat_auth.py         # Авторизация пользователей чата (пароль + Google + Keycloak)
+│   ├── oauth.py             # Authlib OAuth провайдеры (Google, Keycloak)
 │   ├── views.py             # Админка (dashboard, CRUD ботов/юзеров, аудит)
 │   ├── bot_api.py           # Telegram-совместимый Bot API
 │   ├── chat_api.py          # API для фронтенда чата
 │   ├── chat_views.py        # Страница чата
 │   ├── webhook.py           # Исходящие вебхуки к n8n
-│   ├── sse.py               # SSE брокер (in-memory pub/sub)
+│   ├── sse.py               # SSE брокер (Redis pub/sub)
 │   ├── file_handler.py      # Загрузка/скачивание файлов
 │   ├── seed.py              # CLI-команда создания первого админа
 │   └── templates/           # Jinja2 шаблоны (админка + чат)
 ├── Dockerfile
 ├── docker-compose.yml
 ├── nginx.conf
-└── envfile
+└── .env
 ```

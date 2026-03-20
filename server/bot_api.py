@@ -470,12 +470,32 @@ def delete_message(token):
 @bot_api_bp.route("/<token>/answerCallbackQuery", methods=["POST"])
 @bot_from_token
 def answer_callback_query(token):
-    """Telegram-compatible answerCallbackQuery — acknowledges a callback button press."""
+    """Telegram-compatible answerCallbackQuery — acknowledges a callback button press.
+
+    If `text` is provided, sends a toast notification (or alert) to the user
+    who pressed the inline button, via SSE.
+    """
     data = request.get_json(silent=True) or request.form
     callback_query_id = data.get("callback_query_id")
 
     if not callback_query_id:
         return jsonify({"ok": False, "error_code": 400, "description": "callback_query_id is required"}), 400
+
+    text = data.get("text", "")
+    show_alert = data.get("show_alert", False)
+    if isinstance(show_alert, str):
+        show_alert = show_alert.lower() in ("true", "1", "yes")
+
+    if text:
+        redis_client = sse_broker._redis
+        if redis_client:
+            raw_uid = redis_client.get(f"cbq:{callback_query_id}")
+            if raw_uid:
+                user_id = int(raw_uid)
+                sse_broker.publish_user(user_id, "callback_answer", {
+                    "text": text,
+                    "show_alert": bool(show_alert),
+                })
 
     return jsonify({"ok": True, "result": True})
 

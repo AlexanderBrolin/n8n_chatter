@@ -156,6 +156,8 @@ def send_webhook(bot, conversation, message, user):
 
 def send_callback_webhook(bot, conversation, message, user, callback_data):
     """POST Telegram-compatible callback_query to the bot's webhook_url, or queue for polling."""
+    from server.sse import sse_broker
+
     chat_data = {
         "id": conversation.id,
         "type": conversation.chat_type or "private",
@@ -163,10 +165,12 @@ def send_callback_webhook(bot, conversation, message, user, callback_data):
     if conversation.chat_type == "group":
         chat_data["title"] = conversation.title or ""
 
+    callback_query_id = str(uuid.uuid4())
+
     payload = {
         "update_id": message.id,
         "callback_query": {
-            "id": str(uuid.uuid4()),
+            "id": callback_query_id,
             "from": {
                 "id": user.id,
                 "is_bot": False,
@@ -184,6 +188,12 @@ def send_callback_webhook(bot, conversation, message, user, callback_data):
             "data": callback_data,
         },
     }
+
+    # Store callback_query_id → user_id mapping in Redis (TTL 60s)
+    # so answerCallbackQuery can send toast back to the right user
+    redis_client = sse_broker._redis
+    if redis_client:
+        redis_client.setex(f"cbq:{callback_query_id}", 60, user.id)
 
     if not bot.webhook_url:
         _queue_update_for_polling(bot, payload)

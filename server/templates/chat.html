@@ -354,8 +354,8 @@
                                                     <div class="flex gap-1">
                                                         <template x-for="(btn, bi) in row" :key="bi">
                                                             <button
-                                                                @click="handleInlineButton(msg.id, btn)"
-                                                                class="flex-1 px-3 py-1.5 bg-primary-50 hover:bg-primary-100 text-primary-700 text-xs font-medium rounded-lg border border-primary-200 transition-colors truncate"
+                                                                @click="handleInlineButton(msg.id, btn, $event.currentTarget)"
+                                                                class="flex-1 px-3 py-1.5 bg-primary-50 hover:bg-primary-100 text-primary-700 text-xs font-medium rounded-lg border border-primary-200 transition-all truncate disabled:opacity-50 disabled:cursor-wait"
                                                                 x-text="btn.text">
                                                             </button>
                                                         </template>
@@ -909,19 +909,28 @@ function chatApp() {
 
         // --- Inline buttons ---
 
-        async handleInlineButton(msgId, btn) {
+        async handleInlineButton(msgId, btn, el) {
             if (btn.url) {
                 window.open(btn.url, '_blank');
                 return;
             }
             if (btn.callback_data && this.activeConversation) {
+                el.disabled = true;
                 try {
-                    await fetch(`/chat/api/conversations/${this.activeConversation.id}/callback`, {
+                    const resp = await fetch(`/chat/api/conversations/${this.activeConversation.id}/callback`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ message_id: msgId, data: btn.callback_data }),
                     });
-                } catch (e) { console.error('Callback error:', e); }
+                    if (!resp.ok) {
+                        this.showToast('Ошибка отправки callback');
+                    }
+                } catch (e) {
+                    console.error('Callback error:', e);
+                    this.showToast('Ошибка сети');
+                } finally {
+                    setTimeout(() => { el.disabled = false; }, 1000);
+                }
             }
         },
 
@@ -1066,6 +1075,15 @@ function chatApp() {
                 }
             });
 
+            this.userEventSource.addEventListener('callback_answer', (event) => {
+                const data = JSON.parse(event.data);
+                if (data.show_alert) {
+                    alert(data.text);
+                } else {
+                    this.showToast(data.text);
+                }
+            });
+
             this.userEventSource.onerror = () => {
                 this.userEventSource.close();
                 this.userEventSource = null;
@@ -1150,6 +1168,15 @@ function chatApp() {
                 osc.start(ctx.currentTime);
                 osc.stop(ctx.currentTime + 0.3);
             } catch (e) { /* Audio not available */ }
+        },
+
+        showToast(text) {
+            const el = document.createElement('div');
+            el.textContent = text;
+            el.className = 'fixed bottom-6 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-sm px-4 py-2 rounded-lg shadow-lg z-50 transition-opacity duration-300';
+            document.body.appendChild(el);
+            setTimeout(() => { el.classList.add('opacity-0'); }, 2700);
+            setTimeout(() => { el.remove(); }, 3000);
         },
 
         updateTitleBadge() {
